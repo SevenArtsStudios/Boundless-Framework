@@ -102,6 +102,46 @@ impl TraitModifierCollection {
 }
 
 
+impl IntoIterator for TraitModifierCollection {
+	type Item = (GameTrait, Gd<TraitModifierEntries>);
+	type IntoIter = std::collections::hash_map::IntoIter<GameTrait, Gd<TraitModifierEntries>>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.modifiers_by_trait.into_iter()
+	}
+}
+
+impl<'a> IntoIterator for &'a TraitModifierCollection {
+	type Item = (&'a GameTrait, &'a Gd<TraitModifierEntries>);
+	type IntoIter = std::collections::hash_map::Iter<'a, GameTrait, Gd<TraitModifierEntries>>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.modifiers_by_trait.iter()
+	}
+}
+
+impl<'a> IntoIterator for &'a mut TraitModifierCollection {
+	type Item = (&'a GameTrait, &'a mut Gd<TraitModifierEntries>);
+	type IntoIter = std::collections::hash_map::IterMut<'a, GameTrait, Gd<TraitModifierEntries>>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.modifiers_by_trait.iter_mut()
+	}
+}
+
+impl FromIterator<(GameTrait, Gd<TraitModifierEntries>)> for TraitModifierCollection {
+	fn from_iter<T: IntoIterator<Item = (GameTrait, Gd<TraitModifierEntries>)>>(iter: T) -> Self {
+		Self { modifiers_by_trait: iter.into_iter().collect() }
+	}
+}
+
+impl Extend<(GameTrait, Gd<TraitModifierEntries>)> for TraitModifierCollection {
+	fn extend<T: IntoIterator<Item = (GameTrait, Gd<TraitModifierEntries>)>>(&mut self, iter: T) {
+		self.modifiers_by_trait.extend(iter);
+	}
+}
+
+
 impl GodotConvert for TraitModifierCollection {
 	type Via = Dictionary<GameTrait, Gd<TraitModifierEntries>>;
 
@@ -112,14 +152,8 @@ impl GodotConvert for TraitModifierCollection {
 
 impl FromGodot for TraitModifierCollection {
 	fn try_from_godot(via: Self::Via) -> Result<Self, godot::prelude::ConvertError> {
-		let mut trait_values = HashMap::new();
-
-		for (key, value) in via.into_iter() {
-			trait_values.insert(key, value);
-		}
-
 		Ok(
-			Self { modifiers_by_trait: trait_values }
+			Self::from_iter(&via)
 		)
 	}
 }
@@ -128,13 +162,11 @@ impl ToGodot for TraitModifierCollection {
 	type Pass = ByValue;
 
 	fn to_godot(&self) -> ToArg<'_, Self::Via, Self::Pass> {
-		let mut dict = Dictionary::new();
-
-		for (key, value) in &self.modifiers_by_trait {
-			let _ = dict.insert(key.clone(), value);
-		}
-
-		dict
+		self.into_iter()
+			.fold(Dictionary::new(), |mut dict, (key, value)| {
+				let _ = dict.insert(key.clone(), value);
+				dict
+			})
 	}
 }
 

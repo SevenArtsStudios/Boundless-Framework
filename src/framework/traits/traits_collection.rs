@@ -59,6 +59,47 @@ impl TraitsCollection {
 	}
 }
 
+
+impl IntoIterator for TraitsCollection {
+	type Item = (GameTrait, f32);
+	type IntoIter = std::collections::hash_map::IntoIter<GameTrait, f32>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.trait_values.into_iter()
+	}
+}
+
+impl<'a> IntoIterator for &'a TraitsCollection {
+	type Item = (&'a GameTrait, &'a f32);
+	type IntoIter = std::collections::hash_map::Iter<'a, GameTrait, f32>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.trait_values.iter()
+	}
+}
+
+impl<'a> IntoIterator for &'a mut TraitsCollection {
+	type Item = (&'a GameTrait, &'a mut f32);
+	type IntoIter = std::collections::hash_map::IterMut<'a, GameTrait, f32>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.trait_values.iter_mut()
+	}
+}
+
+impl FromIterator<(GameTrait, f32)> for TraitsCollection {
+	fn from_iter<T: IntoIterator<Item = (GameTrait, f32)>>(iter: T) -> Self {
+		let trait_values = iter.into_iter().collect();
+		Self { trait_values }
+	}
+}
+
+impl Extend<(GameTrait, f32)> for TraitsCollection {
+	fn extend<T: IntoIterator<Item = (GameTrait, f32)>>(&mut self, iter: T) {
+		self.trait_values.extend(iter);
+	}
+}
+
 impl TraitsProvider for TraitsCollection {
 	fn get_value(&self, r#trait: &GameTrait) -> Option<f32> {
 		self.get(r#trait)
@@ -76,14 +117,8 @@ impl GodotConvert for TraitsCollection {
 
 impl FromGodot for TraitsCollection {
 	fn try_from_godot(via: Self::Via) -> Result<Self, godot::prelude::ConvertError> {
-		let mut trait_values = HashMap::new();
-
-		for (key, value) in via.into_iter() {
-			trait_values.insert(key, value);
-		}
-
 		Ok(
-			Self { trait_values }
+			Self::from_iter(&via)
 		)
 	}
 }
@@ -92,13 +127,11 @@ impl ToGodot for TraitsCollection {
 	type Pass = ByValue;
 
 	fn to_godot(&self) -> ToArg<'_, Self::Via, Self::Pass> {
-		let mut dict = Dictionary::new();
-
-		for (key, value) in &self.trait_values {
-			let _ = dict.insert(key.clone(), *value);
-		}
-
-		dict
+		self.into_iter()
+			.fold(Dictionary::new(), |mut dict, (key, value)| {
+				let _ = dict.insert(key.clone(), *value);
+				dict
+			})
 	}
 }
 
