@@ -5,20 +5,20 @@ use godot::meta::conv::ByValue;
 use godot::meta::shape::{ClassHeritage, GodotElementShape, GodotShape};
 use godot::prelude::*;
 
-use crate::framework::{GameTrait, GameTraitModifierOperation, GdTraitModifier, TraitModifierEntries, TraitModifierEntry};
+use crate::framework::{Id, GameTraitModifierOperation, GdTraitModifier, TraitModifierEntries, TraitModifierEntry};
 
 
 #[derive(GodotClass, Default)]
 #[class(init, tool)]
 pub struct TraitModifierCollection {
-	pub modifiers_by_trait: HashMap<GameTrait, Gd<TraitModifierEntries>>,
+	pub modifiers_by_trait: HashMap<Id, Gd<TraitModifierEntries>>,
 }
 
 #[godot_api]
 impl TraitModifierCollection {
 	pub fn shape() -> GodotShape {
 		GodotShape::TypedDictionary {
-			key: GameTrait::ELEMENT_SHAPE,
+			key: Id::ELEMENT_SHAPE,
 			value: GodotElementShape::Class {
 				class_id: TraitModifierEntries::class_id(),
 				heritage: ClassHeritage::Resource
@@ -26,8 +26,8 @@ impl TraitModifierCollection {
 		}
 	}
 
-	pub fn apply_modifiers(&self, r#trait: &GameTrait, base_value: f32) -> Option<f32> {
-		let Some(modifiers) = self.modifiers_by_trait.get(r#trait) else {
+	pub fn apply_modifiers(&self, id: &Id, base_value: f32) -> Option<f32> {
+		let Some(modifiers) = self.modifiers_by_trait.get(id) else {
 			return None;
 		};
 
@@ -52,9 +52,9 @@ impl TraitModifierCollection {
 
 
 	#[func]
-	pub fn add(&mut self, r#trait: GameTrait, modifier: Gd<GdTraitModifier>, multiplier: f32) {
+	pub fn add(&mut self, id: Id, modifier: Gd<GdTraitModifier>, multiplier: f32) {
 		self.modifiers_by_trait
-			.entry(r#trait)
+			.entry(id)
 			.or_default()
 			.bind_mut()
 			.add(Gd::from_object(TraitModifierEntry {
@@ -75,8 +75,8 @@ impl TraitModifierCollection {
 		false
 	}
 
-	pub fn remove_trait(&mut self, trait_obj: &GameTrait) -> bool {
-		self.modifiers_by_trait.remove(trait_obj).is_some()
+	pub fn remove_trait(&mut self, id: &Id) -> bool {
+		self.modifiers_by_trait.remove(id).is_some()
 	}
 
 	pub fn set_multiplier(&mut self, modifier: Gd<GdTraitModifier>, multiplier: f32) -> bool {
@@ -103,8 +103,8 @@ impl TraitModifierCollection {
 
 
 impl IntoIterator for TraitModifierCollection {
-	type Item = (GameTrait, Gd<TraitModifierEntries>);
-	type IntoIter = std::collections::hash_map::IntoIter<GameTrait, Gd<TraitModifierEntries>>;
+	type Item = (Id, Gd<TraitModifierEntries>);
+	type IntoIter = std::collections::hash_map::IntoIter<Id, Gd<TraitModifierEntries>>;
 
 	fn into_iter(self) -> Self::IntoIter {
 		self.modifiers_by_trait.into_iter()
@@ -112,8 +112,8 @@ impl IntoIterator for TraitModifierCollection {
 }
 
 impl<'a> IntoIterator for &'a TraitModifierCollection {
-	type Item = (&'a GameTrait, &'a Gd<TraitModifierEntries>);
-	type IntoIter = std::collections::hash_map::Iter<'a, GameTrait, Gd<TraitModifierEntries>>;
+	type Item = (&'a Id, &'a Gd<TraitModifierEntries>);
+	type IntoIter = std::collections::hash_map::Iter<'a, Id, Gd<TraitModifierEntries>>;
 
 	fn into_iter(self) -> Self::IntoIter {
 		self.modifiers_by_trait.iter()
@@ -121,29 +121,29 @@ impl<'a> IntoIterator for &'a TraitModifierCollection {
 }
 
 impl<'a> IntoIterator for &'a mut TraitModifierCollection {
-	type Item = (&'a GameTrait, &'a mut Gd<TraitModifierEntries>);
-	type IntoIter = std::collections::hash_map::IterMut<'a, GameTrait, Gd<TraitModifierEntries>>;
+	type Item = (&'a Id, &'a mut Gd<TraitModifierEntries>);
+	type IntoIter = std::collections::hash_map::IterMut<'a, Id, Gd<TraitModifierEntries>>;
 
 	fn into_iter(self) -> Self::IntoIter {
 		self.modifiers_by_trait.iter_mut()
 	}
 }
 
-impl FromIterator<(GameTrait, Gd<TraitModifierEntries>)> for TraitModifierCollection {
-	fn from_iter<T: IntoIterator<Item = (GameTrait, Gd<TraitModifierEntries>)>>(iter: T) -> Self {
+impl FromIterator<(Id, Gd<TraitModifierEntries>)> for TraitModifierCollection {
+	fn from_iter<T: IntoIterator<Item = (Id, Gd<TraitModifierEntries>)>>(iter: T) -> Self {
 		Self { modifiers_by_trait: iter.into_iter().collect() }
 	}
 }
 
-impl Extend<(GameTrait, Gd<TraitModifierEntries>)> for TraitModifierCollection {
-	fn extend<T: IntoIterator<Item = (GameTrait, Gd<TraitModifierEntries>)>>(&mut self, iter: T) {
+impl Extend<(Id, Gd<TraitModifierEntries>)> for TraitModifierCollection {
+	fn extend<T: IntoIterator<Item = (Id, Gd<TraitModifierEntries>)>>(&mut self, iter: T) {
 		self.modifiers_by_trait.extend(iter);
 	}
 }
 
 
 impl GodotConvert for TraitModifierCollection {
-	type Via = Dictionary<GameTrait, Gd<TraitModifierEntries>>;
+	type Via = Dictionary<Id, Gd<TraitModifierEntries>>;
 
 	fn godot_shape() -> GodotShape {
 		Self::shape()

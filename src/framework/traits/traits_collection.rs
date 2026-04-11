@@ -2,48 +2,49 @@ use std::collections::HashMap;
 
 use godot::{meta::{Element, ToArg, conv::ByValue, shape::{GodotElementShape, GodotShape}}, prelude::*};
 
-use crate::framework::{TraitsProvider, traits::game_trait::GameTrait};
+use crate::framework::Id;
+use crate::framework::TraitsProvider;
 
 
 #[derive(GodotClass, Default, Clone, PartialEq, Debug)]
 #[class(init, tool)]
 pub struct TraitsCollection {
-	trait_values: HashMap<GameTrait, f32>,
+	trait_values: HashMap<Id, f32>,
 }
 
 #[godot_api]
 impl TraitsCollection {
 	pub const SHAPE: GodotShape = GodotShape::TypedDictionary {
-		key: GameTrait::ELEMENT_SHAPE,
+		key: Id::ELEMENT_SHAPE,
 		value: GodotElementShape::Builtin {
 			variant_type: VariantType::FLOAT
 		},
 	};
 
-	pub fn set(&mut self, r#trait: GameTrait, value: f32) -> Option<f32> {
-		self.trait_values.insert(r#trait, value)
+	pub fn set(&mut self, id: Id, value: f32) -> Option<f32> {
+		self.trait_values.insert(id, value)
 	}
 	#[func(rename=set)]
-	pub fn gd_set(&mut self, r#trait: GameTrait, value: f32) -> f32 {
-		self.set(r#trait, value)
+	pub fn gd_set(&mut self, id: Id, value: f32) -> f32 {
+		self.set(id, value)
 			.unwrap_or_default()
 	}
 
-	pub fn get(&self, r#trait: &GameTrait) -> Option<&f32> {
+	pub fn get(&self, id: &Id) -> Option<&f32> {
 		self.trait_values
-			.get(&r#trait)
+			.get(&id)
 	}
 	#[func(rename=get)]
-	pub fn gd_get(&self, r#trait: GameTrait, default_value: f32) -> f32 {
-		self.get(&r#trait)
+	pub fn gd_get(&self, id: Id, default_value: f32) -> f32 {
+		self.get(&id)
 			.copied()
 			.unwrap_or(default_value)
 	}
 
 	#[func]
-	pub fn remove(&mut self, r#trait: GameTrait) -> bool {
+	pub fn remove(&mut self, id: Id) -> bool {
 		self.trait_values
-			.remove(&r#trait)
+			.remove(&id)
 			.is_some()
 	}
 
@@ -53,16 +54,16 @@ impl TraitsCollection {
 	}
 
 	#[func]
-	pub fn contains_trait(&self, r#trait: GameTrait) -> bool {
+	pub fn contains_trait(&self, id: Id) -> bool {
 		self.trait_values
-			.contains_key(&r#trait)
+			.contains_key(&id)
 	}
 }
 
 
 impl IntoIterator for TraitsCollection {
-	type Item = (GameTrait, f32);
-	type IntoIter = std::collections::hash_map::IntoIter<GameTrait, f32>;
+	type Item = (Id, f32);
+	type IntoIter = std::collections::hash_map::IntoIter<Id, f32>;
 
 	fn into_iter(self) -> Self::IntoIter {
 		self.trait_values.into_iter()
@@ -70,8 +71,8 @@ impl IntoIterator for TraitsCollection {
 }
 
 impl<'a> IntoIterator for &'a TraitsCollection {
-	type Item = (&'a GameTrait, &'a f32);
-	type IntoIter = std::collections::hash_map::Iter<'a, GameTrait, f32>;
+	type Item = (&'a Id, &'a f32);
+	type IntoIter = std::collections::hash_map::Iter<'a, Id, f32>;
 
 	fn into_iter(self) -> Self::IntoIter {
 		self.trait_values.iter()
@@ -79,36 +80,36 @@ impl<'a> IntoIterator for &'a TraitsCollection {
 }
 
 impl<'a> IntoIterator for &'a mut TraitsCollection {
-	type Item = (&'a GameTrait, &'a mut f32);
-	type IntoIter = std::collections::hash_map::IterMut<'a, GameTrait, f32>;
+	type Item = (&'a Id, &'a mut f32);
+	type IntoIter = std::collections::hash_map::IterMut<'a, Id, f32>;
 
 	fn into_iter(self) -> Self::IntoIter {
 		self.trait_values.iter_mut()
 	}
 }
 
-impl FromIterator<(GameTrait, f32)> for TraitsCollection {
-	fn from_iter<T: IntoIterator<Item = (GameTrait, f32)>>(iter: T) -> Self {
+impl FromIterator<(Id, f32)> for TraitsCollection {
+	fn from_iter<T: IntoIterator<Item = (Id, f32)>>(iter: T) -> Self {
 		let trait_values = iter.into_iter().collect();
 		Self { trait_values }
 	}
 }
 
-impl Extend<(GameTrait, f32)> for TraitsCollection {
-	fn extend<T: IntoIterator<Item = (GameTrait, f32)>>(&mut self, iter: T) {
+impl Extend<(Id, f32)> for TraitsCollection {
+	fn extend<T: IntoIterator<Item = (Id, f32)>>(&mut self, iter: T) {
 		self.trait_values.extend(iter);
 	}
 }
 
 impl TraitsProvider for TraitsCollection {
-	fn get_value(&self, r#trait: &GameTrait) -> Option<f32> {
-		self.get(r#trait)
+	fn get_value(&self, id: &Id) -> Option<f32> {
+		self.get(id)
 			.copied()
 	}
 }
 
 impl GodotConvert for TraitsCollection {
-	type Via = Dictionary<GameTrait, f32>;
+	type Via = Dictionary<Id, f32>;
 
 	fn godot_shape() -> GodotShape {
 		Self::SHAPE
@@ -128,8 +129,8 @@ impl ToGodot for TraitsCollection {
 
 	fn to_godot(&self) -> ToArg<'_, Self::Via, Self::Pass> {
 		self.into_iter()
-			.fold(Dictionary::new(), |mut dict, (key, value)| {
-				let _ = dict.insert(key.clone(), *value);
+			.fold(Dictionary::new(), |mut dict, (id, value)| {
+				let _ = dict.insert(id.clone(), *value);
 				dict
 			})
 	}
