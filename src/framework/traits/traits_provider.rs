@@ -25,6 +25,16 @@ impl TraitsProvider for GdTraitsProvider {
 	}
 }
 
+impl<'a> TraitsProvider for &'a GdTraitsProvider {
+	fn get_value(&self, id: &Id) -> Option<f32> {
+		if let Some(base_value) = self.traits.get_value(id) {
+			self.modifiers.apply_modifiers(id, base_value)
+		} else {
+			None
+		}
+	}
+}
+
 impl IntoIterator for GdTraitsProvider {
 	type Item = (Id, f32);
 	type IntoIter = std::vec::IntoIter<Self::Item>;
