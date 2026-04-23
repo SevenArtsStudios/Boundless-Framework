@@ -1,4 +1,4 @@
-use godot::{builtin::{Color, StringName, Variant}, classes::{IMeshInstance3D, Mesh, MeshInstance3D}, obj::{Base, Gd, InstanceId, WithBaseField}, prelude::{GodotClass, godot_api}};
+use godot::{builtin::{Color, StringName, Variant}, classes::{IMeshInstance3D, Mesh, MeshInstance3D}, meta::ToGodot, obj::{Base, Gd, InstanceId, WithBaseField}, prelude::{GodotClass, godot_api}};
 
 use crate::framework::WaterMeshRegistry;
 
@@ -10,27 +10,35 @@ pub struct WaterMesh {
 	base: Base<MeshInstance3D>,
 	tracked_mesh_id: Option<InstanceId>,
 
+	#[var(set = set_shallow_color)]
 	#[export(color_no_alpha)]
 	shallow_color: Color,
 
+	#[var(set = set_deep_color)]
 	#[export(color_no_alpha)]
 	deep_color: Color,
 
+	#[var(set = set_water_intensity)]
 	#[export]
 	water_intensity: f32,
 
+	#[var(set = set_water_scale)]
 	#[export]
 	water_scale: f32,
 
+	#[var(set = set_fog_distance)]
 	#[export]
 	fog_distance: f32,
 
+	#[var(set = set_fog_fade)]
 	#[export]
 	fog_fade: f32,
 
+	#[var(set = set_transparency_distance)]
 	#[export]
 	transparency_distance: f32,
 
+	#[var(set = set_transparency_fade)]
 	#[export]
 	transparency_fade: f32,
 }
@@ -111,6 +119,52 @@ impl WaterMesh {
 
 		self.refresh_mesh_callbacks();
 	}
+
+	#[func]
+	pub fn set_shallow_color(&mut self, color: Color) {
+		self.shallow_color = color;
+		if let Some(mesh) = self.base().get_mesh() {
+			if let Some(mut material) = mesh.surface_get_material(0) {
+				material.set("shader_parameter/shallow_color", &color.to_variant());
+			}
+		}
+	}
+
+	#[func]
+	pub fn set_deep_color(&mut self, color: Color) {
+		self.deep_color = color;
+	}
+
+	#[func]
+	pub fn set_water_intensity(&mut self, intensity: f32) {
+		self.water_intensity = intensity;
+	}
+
+	#[func]
+	pub fn set_water_scale(&mut self, scale: f32) {
+		self.water_scale = scale;
+	}
+
+	#[func]
+	pub fn set_fog_distance(&mut self, distance: f32) {
+		self.fog_distance = distance;
+	}
+
+	#[func]
+	pub fn set_fog_fade(&mut self, fade: f32) {
+		self.fog_fade = fade;
+	}
+
+	#[func]
+	pub fn set_transparency_distance(&mut self, distance: f32) {
+		self.transparency_distance = distance;
+	}
+
+	#[func]
+	pub fn set_transparency_fade(&mut self, fade: f32) {
+		self.transparency_fade = fade;
+	}
+
 
 	pub fn get_water_mesh(&self) -> Option<Gd<Mesh>> {
 		self.base().get_mesh()

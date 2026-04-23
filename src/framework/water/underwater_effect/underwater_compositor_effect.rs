@@ -10,7 +10,7 @@ use godot::classes::{
 	CompositorEffect, ICompositorEffect, RdAttachmentFormat, RdPipelineColorBlendState, RdPipelineColorBlendStateAttachment, RdPipelineDepthStencilState, RdPipelineMultisampleState, RdPipelineRasterizationState, RdSamplerState, RdShaderFile, RdShaderSource, RdVertexAttribute, RenderData, RenderSceneBuffersRd, RenderingDevice, RenderingServer, Texture2Drd
 };
 use godot::global::godot_error;
-use godot::obj::{Base, EngineBitfield, EngineEnum, Gd, NewGd, Singleton};
+use godot::obj::{Base, EngineBitfield, Gd, NewGd, Singleton};
 use godot::prelude::{godot_api, GodotClass};
 
 use crate::framework::{apply_effect_pass, mesh_data, render_mask_pass, textures};
@@ -93,10 +93,10 @@ impl ICompositorEffect for UnderwaterEffect {
 		}
 	}
 
-	fn render_callback(&mut self, effect_callback_type: i32, render_data: Option<Gd<RenderData>>) {
-		if effect_callback_type != EffectCallbackType::POST_TRANSPARENT.ord() {
-			return;
-		}
+	fn render_callback(&mut self, _effect_callback_type: i32, render_data: Option<Gd<RenderData>>) {
+		// if effect_callback_type != EffectCallbackType::POST_TRANSPARENT.ord() {
+		// 	return;
+		// }
 
 		let Some(mesh_data) = mesh_data::collect_water_mesh_data() else {
 			return;

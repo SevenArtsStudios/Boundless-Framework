@@ -22,7 +22,6 @@ fn with_registry_mut<R>(mut action: impl FnMut(&mut HashSet<InstanceId>) -> R) -
 }
 
 fn rebuild_buffers() {
-	godot_print!("Rebuilding water mesh buffers...");
 	let (vertices, indices) = collect_buffers();
 
 	WATER_VERTICES.with(|buffer| *buffer.borrow_mut() = vertices);
@@ -42,11 +41,9 @@ fn schedule_rebuild_buffers() {
 	});
 
 	if already_scheduled {
-		// godot_print!("Water mesh buffer rebuild already scheduled, skipping");
 		return;
 	}
 
-	// godot_print!("Scheduling water mesh buffer rebuild");
 	Callable::from_fn("rebuild_buffers", |_args| rebuild_buffers()).call_deferred(&[]);
 }
 

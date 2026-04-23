@@ -1,4 +1,4 @@
-use godot::{builtin::VariantType, classes::IResource, global::godot_print, obj::{Base, WithBaseField}, prelude::{GodotClass, Resource, godot_api}, register::info::{PropertyInfo, PropertyUsageFlags}};
+use godot::{classes::IResource, obj::{Base, WithBaseField}, prelude::{GodotClass, Resource, godot_api}, register::info::{PropertyInfo, PropertyUsageFlags}};
 
 use crate::framework::GameTraitModifierOperation;
 
