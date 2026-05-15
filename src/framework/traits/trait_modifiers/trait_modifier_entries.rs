@@ -1,6 +1,6 @@
 use godot::{obj::Gd, prelude::GodotClass, builtin::Array};
 
-use crate::framework::{GdTraitModifier, TraitModifierEntry};
+use crate::framework::{BaseTraitModifier, TraitModifierEntry};
 
 
 #[derive(GodotClass, Clone)]
@@ -22,7 +22,7 @@ impl TraitModifierEntries {
 			false
 		}
 	}
-	pub fn remove_modifier(&mut self, modifier: &Gd<GdTraitModifier>) -> bool {
+	pub fn remove_modifier(&mut self, modifier: &Gd<BaseTraitModifier>) -> bool {
 		if let Some(index) = self.modifiers.iter_shared().position(|e| e.bind().modifier.as_ref().unwrap() == modifier) {
 			self.modifiers.remove(index);
 			true

@@ -25,13 +25,13 @@ pub trait DamageModifier {
 
 #[derive(GodotClass)]
 #[class(base=Resource, init, tool, rename=DamageModifier)]
-pub struct GdDamageModifier {
+pub struct BaseDamageModifier {
 	#[base]
 	base: Base<Resource>,
 }
 
 #[godot_api]
-impl GdDamageModifier {
+impl BaseDamageModifier {
 	#[func(virtual)]
 	pub fn modify_damage(
 		&self,
@@ -55,7 +55,7 @@ impl GdDamageModifier {
 }
 
 #[godot_dyn]
-impl DamageModifier for GdDamageModifier {
+impl DamageModifier for BaseDamageModifier {
 	fn modify(
 		&mut self,
 		base_amount: f32,

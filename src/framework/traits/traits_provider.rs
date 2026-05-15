@@ -8,14 +8,14 @@ pub trait TraitsProvider {
 
 #[derive(GodotClass)]
 #[class(base=Resource, init, tool, rename=TraitsProvider)]
-pub struct GdTraitsProvider {
+pub struct BaseTraitsProvider {
 	#[export]
 	pub traits: TraitsCollection,
 	#[export]
 	pub modifiers: TraitModifierCollection,
 }
 
-impl TraitsProvider for GdTraitsProvider {
+impl TraitsProvider for BaseTraitsProvider {
 	fn get_value(&self, id: &Id) -> Option<f32> {
 		if let Some(base_value) = self.traits.get_value(id) {
 			self.modifiers.apply_modifiers(id, base_value)
@@ -25,7 +25,7 @@ impl TraitsProvider for GdTraitsProvider {
 	}
 }
 
-impl<'a> TraitsProvider for &'a GdTraitsProvider {
+impl<'a> TraitsProvider for &'a BaseTraitsProvider {
 	fn get_value(&self, id: &Id) -> Option<f32> {
 		if let Some(base_value) = self.traits.get_value(id) {
 			self.modifiers.apply_modifiers(id, base_value)
@@ -35,7 +35,7 @@ impl<'a> TraitsProvider for &'a GdTraitsProvider {
 	}
 }
 
-impl IntoIterator for GdTraitsProvider {
+impl IntoIterator for BaseTraitsProvider {
 	type Item = (Id, f32);
 	type IntoIter = std::vec::IntoIter<Self::Item>;
 
@@ -52,7 +52,7 @@ impl IntoIterator for GdTraitsProvider {
 	}
 }
 
-impl <'a> IntoIterator for &'a GdTraitsProvider {
+impl <'a> IntoIterator for &'a BaseTraitsProvider {
 	type Item = (Id, f32);
 	type IntoIter = std::vec::IntoIter<Self::Item>;
 
@@ -69,7 +69,7 @@ impl <'a> IntoIterator for &'a GdTraitsProvider {
 	}
 }
 
-impl <'a> IntoIterator for &'a mut GdTraitsProvider {
+impl <'a> IntoIterator for &'a mut BaseTraitsProvider {
 	type Item = (Id, f32);
 	type IntoIter = std::vec::IntoIter<Self::Item>;
 
@@ -86,7 +86,7 @@ impl <'a> IntoIterator for &'a mut GdTraitsProvider {
 	}
 }
 
-impl FromIterator<(Id, f32)> for GdTraitsProvider {
+impl FromIterator<(Id, f32)> for BaseTraitsProvider {
 	fn from_iter<T: IntoIterator<Item = (Id, f32)>>(iter: T) -> Self {
 		let traits = iter.into_iter().collect();
 		Self {
@@ -96,7 +96,7 @@ impl FromIterator<(Id, f32)> for GdTraitsProvider {
 	}
 }
 
-impl Extend<(Id, f32)> for GdTraitsProvider {
+impl Extend<(Id, f32)> for BaseTraitsProvider {
 	fn extend<T: IntoIterator<Item = (Id, f32)>>(&mut self, iter: T) {
 		self.traits.extend(iter);
 	}

@@ -5,7 +5,7 @@ use godot::meta::conv::ByValue;
 use godot::meta::shape::{ClassHeritage, GodotElementShape, GodotShape};
 use godot::prelude::*;
 
-use crate::framework::{Id, GameTraitModifierOperation, GdTraitModifier, TraitModifierEntries, TraitModifierEntry};
+use crate::framework::{Id, GameTraitModifierOperation, BaseTraitModifier, TraitModifierEntries, TraitModifierEntry};
 
 
 #[derive(GodotClass, Default)]
@@ -39,7 +39,7 @@ impl TraitModifierCollection {
 			if let Some(modifier) = &entry_ref.modifier {
 				let modifier_ref = modifier.bind();
 				match *modifier_ref {
-					GdTraitModifier { operation: GameTraitModifierOperation::Multiply, is_additive: true, ..} => {
+					BaseTraitModifier { operation: GameTraitModifierOperation::Multiply, is_additive: true, ..} => {
 						multiplier *= modifier_ref.apply_to(base_value, entry_ref.multiplier) / base_value
 					},
 					_ => sum += modifier_ref.apply_to(base_value, entry_ref.multiplier) - base_value,
@@ -52,7 +52,7 @@ impl TraitModifierCollection {
 
 
 	#[func]
-	pub fn add(&mut self, id: Id, modifier: Gd<GdTraitModifier>, multiplier: f32) {
+	pub fn add(&mut self, id: Id, modifier: Gd<BaseTraitModifier>, multiplier: f32) {
 		self.modifiers_by_trait
 			.entry(id)
 			.or_default()
@@ -64,7 +64,7 @@ impl TraitModifierCollection {
 	}
 
 	#[func]
-	pub fn remove(&mut self, modifier: Gd<GdTraitModifier>) -> bool {
+	pub fn remove(&mut self, modifier: Gd<BaseTraitModifier>) -> bool {
 		for modifiers in self.modifiers_by_trait.values_mut() {
 			let found = modifiers.bind_mut().remove_modifier(&modifier);
 			if found {
@@ -79,7 +79,7 @@ impl TraitModifierCollection {
 		self.modifiers_by_trait.remove(id).is_some()
 	}
 
-	pub fn set_multiplier(&mut self, modifier: Gd<GdTraitModifier>, multiplier: f32) -> bool {
+	pub fn set_multiplier(&mut self, modifier: Gd<BaseTraitModifier>, multiplier: f32) -> bool {
 		for modifiers in self.modifiers_by_trait.values_mut() {
 
 			for mut entry in modifiers.bind_mut().iter() {

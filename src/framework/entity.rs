@@ -4,7 +4,7 @@ use godot::{classes::{CharacterBody3D}, obj::{Base, Gd}, prelude::{GodotClass, g
 
 use boundless_macros::godot_damageable;
 
-use crate::framework::{DamageDealer, Damageable, GdTraitsProvider, TraitsHolder, TraitsProvider};
+use crate::framework::{DamageDealer, Damageable, BaseTraitsProvider, TraitsHolder, TraitsProvider};
 
 
 
@@ -12,7 +12,7 @@ use crate::framework::{DamageDealer, Damageable, GdTraitsProvider, TraitsHolder,
 #[class(base=CharacterBody3D, init, tool)]
 pub struct Entity {
 	#[export]
-	pub traits: Option<Gd<GdTraitsProvider>>,
+	pub traits: Option<Gd<BaseTraitsProvider>>,
 
 	#[export]
 	pub health: f32,

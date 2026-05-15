@@ -8,7 +8,7 @@ pub trait TraitModifier {
 
 #[derive(GodotClass)]
 #[class(base=Resource, init, tool, rename=TraitModifier)]
-pub struct GdTraitModifier {
+pub struct BaseTraitModifier {
 	#[var(set = set_operation)]
 	#[export]
 	#[init(val=GameTraitModifierOperation::Multiply)]
@@ -24,7 +24,7 @@ pub struct GdTraitModifier {
 }
 
 #[godot_api]
-impl GdTraitModifier {
+impl BaseTraitModifier {
 	pub const IS_ADDITIVE_PROPERTY: &'static str = "is_additive";
 	pub const OPERATION_PROPERTY: &'static str = "operation";
 
@@ -44,7 +44,7 @@ impl GdTraitModifier {
 }
 
 #[godot_api]
-impl IResource for GdTraitModifier {
+impl IResource for BaseTraitModifier {
 	// This is broken in gdext for now, see https://github.com/godot-rust/gdext/issues/1427
 
 	fn on_validate_property(&self, property: &mut PropertyInfo) {
@@ -61,7 +61,7 @@ impl IResource for GdTraitModifier {
 	}
 }
 
-impl TraitModifier for GdTraitModifier {
+impl TraitModifier for BaseTraitModifier {
 	fn apply_modifiers(&self, base_value: f32) -> Option<f32> {
 		Some(self.apply_to(base_value, 1.0))
 	}
