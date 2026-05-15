@@ -110,10 +110,10 @@ impl ICompositorEffect for UnderwaterEffect {
 			return;
 		};
 
-		if !self.render_pipeline.is_valid()
-			|| !self.compute_pipeline.is_valid()
-			|| !self.render_shader.is_valid()
-			|| !self.compute_shader.is_valid()
+		if !self.render_pipeline.is_valid() ||
+		   !self.compute_pipeline.is_valid() ||
+		   !self.render_shader.is_valid() ||
+		   !self.compute_shader.is_valid()
 		{
 			godot_error!("UnderwaterEffect render callback called but effect is not properly initialized");
 			return;
@@ -357,7 +357,7 @@ impl UnderwaterEffect {
 		let mut vertex_attribute = RdVertexAttribute::new_gd();
 		vertex_attribute.set_format(DataFormat::R32G32B32A32_SFLOAT);
 		vertex_attribute.set_location(0);
-		vertex_attribute.set_stride(16);
+		vertex_attribute.set_stride(4 * size_of::<f32>() as u32);
 		vertex_attribute.set_offset(0);
 
 		let mut attributes = Array::<Gd<RdVertexAttribute>>::new();
@@ -372,6 +372,7 @@ impl UnderwaterEffect {
 		blend_attachment.set_write_g(true);
 		blend_attachment.set_write_b(true);
 		blend_attachment.set_write_a(true);
+		blend_attachment.set_enable_blend(false);
 
 		let mut blend_attachments = Array::<Gd<RdPipelineColorBlendStateAttachment>>::new();
 		blend_attachments.push(&blend_attachment);

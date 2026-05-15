@@ -91,8 +91,12 @@ void main()
 	WaterParams water_parameters = water_params[floatBitsToUint(water_map.g)];
 	vec3 world_color = imageLoad(color_image, uv).rgb;
 
-
+	// vec4 final_color = vec4(1.0, 0.0, 0.0, 1.0);
+	// if (floatBitsToUint(water_map.g) != 0) {
+	// 	final_color = vec4(0.0, 1.0, 0.0, 1.0);
+	// }
 	vec4 final_color = vec4(compute_water_color(world_color, near_plane, water_end, water_parameters), 1.0);
+
 
 
 	imageStore(color_image, uv, final_color);

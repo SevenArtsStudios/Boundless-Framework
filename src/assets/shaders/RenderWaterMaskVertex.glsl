@@ -17,12 +17,11 @@ layout(push_constant, std430) uniform Params {
 	restrict readonly highp mat4 world_to_clip; // World-space -> Clip-space Matrix to transform the mesh
 };
 
-layout(location = 0) out float mesh_id_float;
+layout(location = 0) flat out uint mesh_id;
 
 void main()
 {
-	uint mesh_id = uint(world_vertex.w);
-	mesh_id_float = uintBitsToFloat(mesh_id);
+	mesh_id = floatBitsToUint(world_vertex.w);
 	WaterInfo water_info = water_infos[mesh_id];
 
 	mat4 transform = water_info.transform;

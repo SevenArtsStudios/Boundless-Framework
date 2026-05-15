@@ -1,15 +1,11 @@
 use godot::builtin::{
-	Array, PackedByteArray, PackedInt32Array, PackedVector3Array, Projection, Rid,
+	Array, PackedByteArray, Projection, Rid,
 };
-use godot::classes::mesh::ArrayType;
 use godot::classes::rendering_device::IndexBufferFormat;
-use godot::classes::{RenderingDevice, RenderingServer};
-use godot::obj::{EngineEnum, Gd, Singleton, WithBaseField};
+use godot::classes::RenderingDevice;
+use godot::obj::{Gd, Singleton, WithBaseField};
 
 use crate::framework::{WaterMesh, WaterMeshRegistry};
-
-/// 4x4 matrix + intensity + scale = 18 | 20 with padding
-const WATER_INFO_STRIDE: usize = 20;
 
 pub(crate) struct WaterMeshGpuData {
 	pub vertex_floats: Vec<f32>,
@@ -24,9 +20,10 @@ pub(crate) fn collect_water_mesh_data() -> Option<WaterMeshGpuData> {
 	let mut water_info_floats = Vec::<f32>::new();
 	let mut water_params_floats = Vec::<f32>::new();
 
-	let server = RenderingServer::singleton();
-	let mesh_ids = WaterMeshRegistry::mesh_ids();
+	let mesh_reg = WaterMeshRegistry::singleton();
 
+	let mesh_ids = mesh_reg.bind().get_mesh_ids();
+	let mut mesh_index: u32 = 0;
 	for mesh_id in mesh_ids {
 		let Ok(mesh_obj) = Gd::<WaterMesh>::try_from_instance_id(mesh_id) else {
 			continue;
@@ -37,38 +34,21 @@ pub(crate) fn collect_water_mesh_data() -> Option<WaterMeshGpuData> {
 			continue;
 		}
 
-		let Some(surface_mesh) = mesh.get_water_mesh() else {
+		let mesh_reg_bind = mesh_reg.bind();
+		let Some((water_vertices, water_indices)) = mesh_reg_bind.get_mesh_data(&mesh_id) else {
 			continue;
 		};
 
-		let mesh_index = (water_info_floats.len() / WATER_INFO_STRIDE) as u32;
-		let surface_count = surface_mesh.get_surface_count();
-		for surface_index in 0..surface_count {
-			let surface_arrays = server.mesh_surface_get_arrays(surface_mesh.get_rid(), surface_index);
+		let idx_offset = vertex_floats.len() as u32 / 4;
+		for vertex in water_vertices.as_slice().iter().copied() {
+			vertex_floats.push(vertex.x);
+			vertex_floats.push(vertex.y);
+			vertex_floats.push(vertex.z);
+			vertex_floats.push(f32::from_bits(mesh_index));
+		}
 
-			let Some(vertex_variant) = surface_arrays.get(ArrayType::VERTEX.ord() as usize) else {
-				continue;
-			};
-			let Ok(surface_vertices): Result<PackedVector3Array, _> = vertex_variant.try_to() else {
-				continue;
-			};
-
-			let surface_indices = surface_arrays
-				.get(ArrayType::INDEX.ord() as usize)
-				.and_then(|value| value.try_to::<PackedInt32Array>().ok())
-				.unwrap_or_default();
-
-			let vertex_offset = (vertex_floats.len() / 4) as u32;
-			for vertex in surface_vertices.as_slice().iter().copied() {
-				vertex_floats.push(vertex.x);
-				vertex_floats.push(vertex.y);
-				vertex_floats.push(vertex.z);
-				vertex_floats.push(f32::from_bits(mesh_index));
-			}
-
-			for index in surface_indices.as_slice().iter().copied() {
-				indices.push(index as u32 + vertex_offset);
-			}
+		for index in water_indices.as_slice().iter().copied() {
+			indices.push(index as u32 + idx_offset);
 		}
 
 		let transform = Projection::from(mesh.base().get_global_transform());
@@ -92,6 +72,8 @@ pub(crate) fn collect_water_mesh_data() -> Option<WaterMeshGpuData> {
 		water_params_floats.push(mesh.transparency_fade_value());
 		water_params_floats.push(0.0);
 		water_params_floats.push(0.0);
+
+		mesh_index += 1;
 	}
 
 	if vertex_floats.is_empty() || indices.is_empty() || water_info_floats.is_empty() {
