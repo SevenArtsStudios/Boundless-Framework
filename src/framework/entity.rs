@@ -1,6 +1,4 @@
-use std::ops::Deref;
-
-use godot::{classes::{CharacterBody3D}, obj::{Base, Gd}, prelude::{GodotClass, godot_api}};
+use godot::{classes::CharacterBody3D, obj::{Base, Gd}, prelude::{GodotClass, godot_api}, register::godot_dyn};
 
 use boundless_macros::godot_damageable;
 
@@ -26,13 +24,18 @@ pub struct Entity {
 impl Entity {}
 
 impl TraitsHolder for Entity {
-	fn traits(&self) -> Option<impl Deref<Target = impl TraitsProvider> + '_> {
-		self.traits.as_ref().map(Gd::bind)
+	fn traits(&self) -> Option<Box<dyn TraitsProvider>> {
+		self.traits.as_ref().map(|gd| {
+			let bound = gd.bind();
+			Box::new((*bound).clone()) as Box<dyn TraitsProvider>
+		})
 	}
 }
 
+#[godot_dyn]
 impl DamageDealer for Entity {}
 
+#[godot_dyn]
 impl Damageable for Entity {
 	fn apply_damage(&mut self, amount: f32) {
 		self.health -= amount;

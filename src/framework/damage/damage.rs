@@ -26,14 +26,14 @@ impl Damage {
 	pub fn compute_damage_amount(
 		&mut self,
 		target: &dyn Damageable,
-		damage_dealer: Option<&dyn DamageDealer>,
+		damage_dealer: &Option<&dyn DamageDealer>,
 	) -> f32 {
 		let mut total_damage_amount = self.amount;
 
 		for modifier in &mut self.modifiers {
 			let modified_amount = modifier
 				.bind_mut()
-				.modify(self.amount, target, damage_dealer);
+				.modify(self.amount, target, &damage_dealer.as_deref());
 
 			total_damage_amount += modified_amount - self.amount;
 		}
@@ -44,24 +44,19 @@ impl Damage {
 	pub fn inflict_upon(
 		&mut self,
 		target: &mut dyn Damageable,
-		mut damage_dealer: Option<&mut dyn DamageDealer>,
+		damage_dealer: Option<&mut dyn DamageDealer>,
 	) {
-		let amount = self.compute_damage_amount(target, damage_dealer.as_deref());
+		let amount = self.compute_damage_amount(target, &damage_dealer.as_deref());
 		target.apply_damage(amount);
 
-		if let Some(dealer) = damage_dealer.as_deref_mut() {
-			for modifier in &mut self.modifiers {
-				modifier
-					.bind_mut()
-					.apply(amount, target, Some(&mut *dealer));
-			}
+		for modifier in &mut self.modifiers {
+			modifier
+				.bind_mut()
+				.apply(amount, target, &damage_dealer);
+		}
 
+		if let Some(dealer) = damage_dealer {
 			dealer.award_damage(self, target);
-		} else {
-			for modifier in &mut self.modifiers {
-
-				modifier.bind_mut().apply(amount, target, None);
-			}
 		}
 	}
 }

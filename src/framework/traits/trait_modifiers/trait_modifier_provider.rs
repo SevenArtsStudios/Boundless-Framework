@@ -8,7 +8,7 @@ use godot::prelude::*;
 use crate::framework::{Id, GameTraitModifierOperation, BaseTraitModifier, TraitModifierEntries, TraitModifierEntry};
 
 
-#[derive(GodotClass, Default)]
+#[derive(GodotClass, Default, Clone)]
 #[class(init, tool)]
 pub struct TraitModifierCollection {
 	pub modifiers_by_trait: HashMap<Id, Gd<TraitModifierEntries>>,

@@ -1,5 +1,3 @@
-use std::ops::DerefMut;
-
 use crate::framework::{AsNode, DamageDealerProvider, TraitsHolder};
 
 pub trait Damageable: DamageDealerProvider + TraitsHolder + AsNode {
@@ -10,17 +8,14 @@ pub trait Damageable: DamageDealerProvider + TraitsHolder + AsNode {
 }
 
 pub trait DamageableProvider {
-	fn get_damageable(&mut self) -> Option<impl DerefMut<Target = impl Damageable> + '_>
-	where
-		Self: Sized;
+	fn get_damageable(&mut self) -> Option<&mut dyn Damageable>;
 }
 
 impl<T> DamageableProvider for T
 	where
 		T: Damageable
 {
-	fn get_damageable(&mut self) -> Option<impl DerefMut<Target = impl Damageable> + '_>
-	{
-		Some::<&mut Self>(self)
+	fn get_damageable(&mut self) -> Option<&mut dyn Damageable> {
+		Some(self)
 	}
 }

@@ -9,14 +9,14 @@ pub struct DamageBuilder {
 	#[init(val=1.0)]
 	pub amount: f32,
 	#[export]
-	pub modifiers: Array<DynGd<Resource, dyn DamageModifier>>,
+	pub modifiers: Array<Option<DynGd<Resource, dyn DamageModifier>>>,
 }
 
 impl DamageBuilder {
 	pub fn build(&self) -> Damage {
 		Damage::new(
 			self.amount,
-			self.modifiers.iter_shared(),
+			self.modifiers.iter_shared().flatten(),
 		)
 	}
 }
@@ -28,7 +28,7 @@ pub fn flatten_damage_builders(
 		let builder_ref = builder.bind();
 		Damage::new(
 			builder_ref.amount,
-			unique_modifiers(builder_ref.modifiers.iter_shared()),
+			unique_modifiers(builder_ref.modifiers.iter_shared().flatten()),
 		)
 	});
 

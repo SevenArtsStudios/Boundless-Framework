@@ -6,7 +6,7 @@ pub trait TraitsProvider {
 	fn get_value(&self, id: &Id) -> Option<f32>;
 }
 
-#[derive(GodotClass)]
+#[derive(GodotClass, Clone)]
 #[class(base=Resource, init, tool, rename=TraitsProvider)]
 pub struct BaseTraitsProvider {
 	#[export]
