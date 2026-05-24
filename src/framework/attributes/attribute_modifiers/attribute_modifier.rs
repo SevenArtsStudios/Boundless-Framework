@@ -1,18 +1,18 @@
 use godot::{classes::IResource, obj::{Base, WithBaseField}, prelude::{GodotClass, Resource, godot_api}, register::info::{PropertyInfo, PropertyUsageFlags}};
 
-use crate::framework::GameTraitModifierOperation;
+use crate::framework::AttributeModifierOperation;
 
-pub trait TraitModifier {
+pub trait AttributeModifier {
 	fn apply_modifiers(&self, base_value: f32) -> Option<f32>;
 }
 
 #[derive(GodotClass)]
-#[class(base=Resource, init, tool, rename=TraitModifier)]
-pub struct BaseTraitModifier {
+#[class(base=Resource, init, tool, rename=AttributeModifier)]
+pub struct BaseAttributeModifier {
 	#[var(set = set_operation)]
 	#[export]
-	#[init(val=GameTraitModifierOperation::Multiply)]
-	pub operation: GameTraitModifierOperation,
+	#[init(val=AttributeModifierOperation::Multiply)]
+	pub operation: AttributeModifierOperation,
 	#[export]
 	#[init(val=1.0)]
 	pub value: f32,
@@ -24,27 +24,27 @@ pub struct BaseTraitModifier {
 }
 
 #[godot_api]
-impl BaseTraitModifier {
+impl BaseAttributeModifier {
 	pub const IS_ADDITIVE_PROPERTY: &'static str = "is_additive";
 	pub const OPERATION_PROPERTY: &'static str = "operation";
 
 	pub fn apply_to(&self, base_value: f32, multiplier: f32) -> f32 {
 		match self.operation {
-			GameTraitModifierOperation::Set => self.value * multiplier,
-			GameTraitModifierOperation::Multiply => base_value * self.value * multiplier,
-			GameTraitModifierOperation::Add => base_value + self.value * multiplier,
+			AttributeModifierOperation::Set => self.value * multiplier,
+			AttributeModifierOperation::Multiply => base_value * self.value * multiplier,
+			AttributeModifierOperation::Add => base_value + self.value * multiplier,
 		}
 	}
 
 	#[func]
-	fn set_operation(&mut self, operation: GameTraitModifierOperation) {
+	fn set_operation(&mut self, operation: AttributeModifierOperation) {
 		self.operation = operation;
 		self.base().signals().property_list_changed().emit();
 	}
 }
 
 #[godot_api]
-impl IResource for BaseTraitModifier {
+impl IResource for BaseAttributeModifier {
 	// This is broken in gdext for now, see https://github.com/godot-rust/gdext/issues/1427
 
 	fn on_validate_property(&self, property: &mut PropertyInfo) {
@@ -53,7 +53,7 @@ impl IResource for BaseTraitModifier {
 		}
 
 		property.usage =
-			if self.operation == GameTraitModifierOperation::Multiply {
+			if self.operation == AttributeModifierOperation::Multiply {
 				PropertyUsageFlags::DEFAULT
 			} else {
 				PropertyUsageFlags::NONE
@@ -61,7 +61,7 @@ impl IResource for BaseTraitModifier {
 	}
 }
 
-impl TraitModifier for BaseTraitModifier {
+impl AttributeModifier for BaseAttributeModifier {
 	fn apply_modifiers(&self, base_value: f32) -> Option<f32> {
 		Some(self.apply_to(base_value, 1.0))
 	}

@@ -1,23 +1,23 @@
 use godot::prelude::GodotClass;
 
-use crate::framework::{Id, TraitModifierCollection, TraitsCollection};
+use crate::framework::{Id, AttributeModifierCollection, AttributeCollection};
 
-pub trait TraitsProvider {
+pub trait AttributeProvider {
 	fn get_value(&self, id: &Id) -> Option<f32>;
 }
 
 #[derive(GodotClass, Clone)]
-#[class(base=Resource, init, tool, rename=TraitsProvider)]
-pub struct BaseTraitsProvider {
+#[class(base=Resource, init, tool, rename=AttributeProvider)]
+pub struct BaseAttributeProvider {
 	#[export]
-	pub traits: TraitsCollection,
+	pub attributes: AttributeCollection,
 	#[export]
-	pub modifiers: TraitModifierCollection,
+	pub modifiers: AttributeModifierCollection,
 }
 
-impl TraitsProvider for BaseTraitsProvider {
+impl AttributeProvider for BaseAttributeProvider {
 	fn get_value(&self, id: &Id) -> Option<f32> {
-		if let Some(base_value) = self.traits.get_value(id) {
+		if let Some(base_value) = self.attributes.get_value(id) {
 			self.modifiers.apply_modifiers(id, base_value)
 		} else {
 			None
@@ -25,9 +25,9 @@ impl TraitsProvider for BaseTraitsProvider {
 	}
 }
 
-impl<'a> TraitsProvider for &'a BaseTraitsProvider {
+impl<'a> AttributeProvider for &'a BaseAttributeProvider {
 	fn get_value(&self, id: &Id) -> Option<f32> {
-		if let Some(base_value) = self.traits.get_value(id) {
+		if let Some(base_value) = self.attributes.get_value(id) {
 			self.modifiers.apply_modifiers(id, base_value)
 		} else {
 			None
@@ -35,12 +35,12 @@ impl<'a> TraitsProvider for &'a BaseTraitsProvider {
 	}
 }
 
-impl IntoIterator for BaseTraitsProvider {
+impl IntoIterator for BaseAttributeProvider {
 	type Item = (Id, f32);
 	type IntoIter = std::vec::IntoIter<Self::Item>;
 
 	fn into_iter(self) -> Self::IntoIter {
-		self.traits
+		self.attributes
 			.into_iter()
 			.map(|(id, base_value)| {
 				let modified_value = self.modifiers.apply_modifiers(&id, base_value)
@@ -52,12 +52,12 @@ impl IntoIterator for BaseTraitsProvider {
 	}
 }
 
-impl <'a> IntoIterator for &'a BaseTraitsProvider {
+impl <'a> IntoIterator for &'a BaseAttributeProvider {
 	type Item = (Id, f32);
 	type IntoIter = std::vec::IntoIter<Self::Item>;
 
 	fn into_iter(self) -> Self::IntoIter {
-		(&self.traits)
+		(&self.attributes)
 			.into_iter()
 			.map(|(id, base_value)| {
 				let modified_value = self.modifiers.apply_modifiers(&id, *base_value)
@@ -69,12 +69,12 @@ impl <'a> IntoIterator for &'a BaseTraitsProvider {
 	}
 }
 
-impl <'a> IntoIterator for &'a mut BaseTraitsProvider {
+impl <'a> IntoIterator for &'a mut BaseAttributeProvider {
 	type Item = (Id, f32);
 	type IntoIter = std::vec::IntoIter<Self::Item>;
 
 	fn into_iter(self) -> Self::IntoIter {
-		(&self.traits)
+		(&self.attributes)
 			.into_iter()
 			.map(|(id, base_value)| {
 				let modified_value = self.modifiers.apply_modifiers(&id, *base_value)
@@ -86,18 +86,18 @@ impl <'a> IntoIterator for &'a mut BaseTraitsProvider {
 	}
 }
 
-impl FromIterator<(Id, f32)> for BaseTraitsProvider {
+impl FromIterator<(Id, f32)> for BaseAttributeProvider {
 	fn from_iter<T: IntoIterator<Item = (Id, f32)>>(iter: T) -> Self {
-		let traits = iter.into_iter().collect();
+		let attributes = iter.into_iter().collect();
 		Self {
-			traits,
-			modifiers: TraitModifierCollection::default(),
+			attributes,
+			modifiers: AttributeModifierCollection::default(),
 		}
 	}
 }
 
-impl Extend<(Id, f32)> for BaseTraitsProvider {
+impl Extend<(Id, f32)> for BaseAttributeProvider {
 	fn extend<T: IntoIterator<Item = (Id, f32)>>(&mut self, iter: T) {
-		self.traits.extend(iter);
+		self.attributes.extend(iter);
 	}
 }

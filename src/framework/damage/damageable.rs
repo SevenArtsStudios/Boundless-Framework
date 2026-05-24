@@ -1,6 +1,6 @@
-use crate::framework::{AsNode, DamageDealerProvider, TraitsHolder};
+use crate::framework::{AsNode, DamageDealerProvider, AttributeHolder};
 
-pub trait Damageable: DamageDealerProvider + TraitsHolder + AsNode {
+pub trait Damageable: DamageDealerProvider + AttributeHolder + AsNode {
 	fn get_health(&self) -> Option<f32>;
 
 	fn apply_damage(&mut self, amount: f32);

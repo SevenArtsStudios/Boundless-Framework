@@ -2,7 +2,7 @@ use godot::{classes::CharacterBody3D, obj::{Base, Gd}, prelude::{GodotClass, god
 
 use boundless_macros::godot_damageable;
 
-use crate::framework::{DamageDealer, Damageable, BaseTraitsProvider, TraitsHolder, TraitsProvider};
+use crate::framework::{DamageDealer, Damageable, BaseAttributeProvider, AttributeHolder, AttributeProvider};
 
 
 
@@ -10,7 +10,7 @@ use crate::framework::{DamageDealer, Damageable, BaseTraitsProvider, TraitsHolde
 #[class(base=CharacterBody3D, init, tool)]
 pub struct Entity {
 	#[export]
-	pub traits: Option<Gd<BaseTraitsProvider>>,
+	pub traits: Option<Gd<BaseAttributeProvider>>,
 
 	#[export]
 	pub health: f32,
@@ -23,11 +23,11 @@ pub struct Entity {
 #[godot_api]
 impl Entity {}
 
-impl TraitsHolder for Entity {
-	fn traits(&self) -> Option<Box<dyn TraitsProvider>> {
+impl AttributeHolder for Entity {
+	fn attributes(&self) -> Option<Box<dyn AttributeProvider>> {
 		self.traits.as_ref().map(|gd| {
 			let bound = gd.bind();
-			Box::new((*bound).clone()) as Box<dyn TraitsProvider>
+			Box::new((*bound).clone()) as Box<dyn AttributeProvider>
 		})
 	}
 }

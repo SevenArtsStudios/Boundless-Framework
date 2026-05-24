@@ -1,6 +1,6 @@
-use crate::framework::{AsNode, Damage, Damageable, DamageableProvider, TraitsHolder};
+use crate::framework::{AsNode, Damage, Damageable, DamageableProvider, AttributeHolder};
 
-pub trait DamageDealer: DamageableProvider + TraitsHolder + AsNode {
+pub trait DamageDealer: DamageableProvider + AttributeHolder + AsNode {
 	fn award_damage(&mut self, _damage: &Damage, _target: &mut dyn Damageable) { }
 }
 
