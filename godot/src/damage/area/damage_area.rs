@@ -1,0 +1,185 @@
+use std::{collections::{HashMap, HashSet}, sync::{Arc, Mutex}};
+
+use boundless::{damage::{Damage, DamageDealer, Damageable}};
+use godot::{
+	classes::{Area3D, IArea3D}, prelude::*
+};
+
+use crate::{DamageAreaHitboxBuilder, DamageBuilder, GodotDamageDealer, GodotDamageable, flatten_damage_builders};
+
+
+type DamageableHandle = Option<DynGd<Node, dyn Damageable>>;
+
+#[derive(GodotClass)]
+#[class(base=Area3D, init, tool)]
+pub struct DamageArea {
+	#[base]
+	pub base: Base<Area3D>,
+
+	#[init(val = 0)]
+	#[export]
+	pub flags: i64,
+
+	#[init(val = 0.0)]
+	#[export]
+	pub life_time: f32,
+
+	#[init(val = 0)]
+	#[export]
+	pub max_impacts: i32,
+
+	#[init(val = 1.0)]
+	#[export]
+	pub damage_multiplier: f32,
+
+	#[export]
+	pub damage_builders: Array<Gd<DamageBuilder>>,
+
+	#[export]
+	pub damage_dealer: Option<DynGd<Node, dyn DamageDealer>>,
+
+	impacts_history: HashMap<DamageableHandle, i32>,
+	impacts_buffer: HashSet<DamageableHandle>,
+
+	buffered_impacts_flush: bool,
+}
+
+#[godot_api]
+impl DamageArea {
+	pub fn new(
+		base: Base<Area3D>,
+		flags: i64,
+		life_time: f32,
+		max_impacts: i32,
+		damage_multiplier: f32,
+	) -> Self {
+		Self {
+			base,
+			flags: flags,
+			life_time: life_time,
+			max_impacts: max_impacts,
+			damage_multiplier: damage_multiplier,
+			damage_builders: Default::default(),
+			damage_dealer: Default::default(),
+			impacts_history: Default::default(),
+			impacts_buffer: Default::default(),
+			buffered_impacts_flush: Default::default(),
+		}
+	}
+
+	pub fn with_dealer(mut self, dealer: DynGd<Node, dyn DamageDealer>) -> Self {
+		self.damage_dealer = Some(dealer);
+		self
+	}
+
+	pub fn with_hitbox(mut self, hitbox_builder: Gd<DamageAreaHitboxBuilder>) -> Self {
+		hitbox_builder.bind().add_to(&mut self.base_mut());
+		self
+	}
+	pub fn with_hitboxes(mut self, hitbox_builders: impl IntoIterator<Item = Gd<DamageAreaHitboxBuilder>>) -> Self {
+		for hitbox_builder in hitbox_builders {
+			hitbox_builder.bind().add_to(&mut self.base_mut());
+		}
+
+		self
+	}
+
+	pub fn build_damages(&self) -> Vec<Damage> {
+		let mut damages = flatten_damage_builders(self.damage_builders.iter_shared());
+
+		for damage in &mut damages {
+			damage.amount *= self.damage_multiplier;
+		}
+
+		damages
+	}
+
+	pub fn inflict_upon(
+		&mut self,
+		target: DynGd<Node, dyn Damageable>,
+	) {
+		let mut damages = self.build_damages();
+		let damage_dealer = self.damage_dealer.as_ref().map(|dealer| {
+			Arc::new(Mutex::new(GodotDamageDealer::from(dealer.clone()))) as Arc<Mutex<dyn DamageDealer>>
+		});
+		let godot_target = GodotDamageable::from(target);
+
+		for damage in &mut damages {
+			damage.inflicted_upon(godot_target.clone(), damage_dealer.clone());
+		}
+	}
+
+	pub fn get_impact_count(&self, target_handle: &DamageableHandle) -> i32 {
+		self.impacts_history.get(target_handle).cloned().unwrap_or(0)
+	}
+
+	fn buffer_impact(&mut self, target_handle: DamageableHandle) {
+		if self.max_impacts >= 0 && self.get_impact_count(&target_handle) >= self.max_impacts {
+			return;
+		}
+
+		self.impacts_buffer.insert(target_handle);
+		if ! self.buffered_impacts_flush {
+			self.run_deferred(DamageArea::flush_buffered_impacts);
+			self.buffered_impacts_flush = true;
+		}
+	}
+
+	pub fn flush_buffered_impacts(&mut self) {
+		let _buffered = std::mem::take(&mut self.impacts_buffer);
+		for handle in _buffered {
+			if let Some(target) = handle {
+				let history_key = Some(target.clone());
+				self.inflict_upon(target);
+				*self.impacts_history.entry(history_key).or_insert(0) += 1;
+			}
+		}
+
+		self.buffered_impacts_flush = false;
+		self.reset_impacts();
+	}
+
+	pub fn reset_impacts(&mut self) {
+		self.impacts_buffer.clear();
+	}
+
+
+	#[func]
+	pub fn on_area_entered(&mut self, area: Gd<Area3D>) {
+		if let Ok(damageable) = area.upcast::<Node3D>().try_dynify::<dyn Damageable>() {
+			self.buffer_impact(Some(damageable.upcast::<Node>()));
+		}
+	}
+
+	#[func]
+	pub fn on_body_entered(&mut self, body: Gd<Node3D>) {
+		if let Ok(damageable) = body.try_dynify::<dyn Damageable>() {
+			self.buffer_impact(Some(damageable.upcast::<Node>()));
+		}
+	}
+}
+
+#[godot_api]
+impl IArea3D for DamageArea {
+	fn ready(&mut self) {
+		// We use untyped signals to avoid crashes when hot-reloading
+		let mut gd_self = self.to_gd();
+
+		let body_entered_callable = gd_self.callable("on_body_entered");
+		gd_self.connect("body_entered", &body_entered_callable);
+
+		let area_entered_callable = gd_self.callable("on_area_entered");
+		gd_self.connect("area_entered", &area_entered_callable);
+
+
+		// self.base()
+		// 	.signals()
+		// 	.body_entered()
+		// 	.connect_other(self, DamageArea::on_body_entered);
+
+		// self.base()
+		// 	.signals()
+		// 	.area_entered()
+		// 	.connect_other(self, DamageArea::on_area_entered);
+	}
+}

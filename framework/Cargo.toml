@@ -1,0 +1,10 @@
+[package]
+name = "boundless"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+string_cache = "0.9.0"

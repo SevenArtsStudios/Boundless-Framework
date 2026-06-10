@@ -1,0 +1,15 @@
+[package]
+name = "godot-boundless"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+standalone = []
+
+[dependencies]
+godot = {version = "0.5.0", features = ["experimental-godot-api", "experimental-threads"]}
+boundless = { path = "../framework" }
+boundless-godot-macros = { path = "../godot-macros" }
