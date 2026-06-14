@@ -7,9 +7,9 @@ use godot::prelude::*;
 pub struct GodotDamageDealer(DynGd<Node, dyn DamageDealer>);
 
 impl GodotDamageDealer {
-	pub fn from(item: DynGd<Node, dyn DamageDealer>) -> Self {
+	pub fn from(damage_dealer: DynGd<Node, dyn DamageDealer>) -> Self {
 		return Self {
-			0: item
+			0: damage_dealer,
 		}
 	}
 }

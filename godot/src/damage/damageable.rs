@@ -5,9 +5,9 @@ use boundless::{attributes::{AttributeHolder, AttributeProvider}, damage::{Damag
 pub struct GodotDamageable(DynGd<Node, dyn Damageable>);
 
 impl GodotDamageable {
-	pub fn from(item: DynGd<Node, dyn Damageable>) -> Self {
+	pub fn from(damageable: DynGd<Node, dyn Damageable>) -> Self {
 		return Self {
-			0: item
+			0: damageable
 		}
 	}
 }

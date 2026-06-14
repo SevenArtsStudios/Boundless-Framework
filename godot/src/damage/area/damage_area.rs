@@ -8,8 +8,6 @@ use godot::{
 use crate::{DamageAreaHitboxBuilder, DamageBuilder, GodotDamageDealer, GodotDamageable, flatten_damage_builders};
 
 
-type DamageableHandle = Option<DynGd<Node, dyn Damageable>>;
-
 #[derive(GodotClass)]
 #[class(base=Area3D, init, tool)]
 pub struct DamageArea {
@@ -38,8 +36,8 @@ pub struct DamageArea {
 	#[export]
 	pub damage_dealer: Option<DynGd<Node, dyn DamageDealer>>,
 
-	impacts_history: HashMap<DamageableHandle, i32>,
-	impacts_buffer: HashSet<DamageableHandle>,
+	impacts_history: HashMap<DynGd<Node, dyn Damageable>, i32>,
+	impacts_buffer: HashSet<DynGd<Node, dyn Damageable>>,
 
 	buffered_impacts_flush: bool,
 }
@@ -109,16 +107,16 @@ impl DamageArea {
 		}
 	}
 
-	pub fn get_impact_count(&self, target_handle: &DamageableHandle) -> i32 {
-		self.impacts_history.get(target_handle).cloned().unwrap_or(0)
+	pub fn get_impact_count(&self, target: &DynGd<Node, dyn Damageable>) -> i32 {
+		self.impacts_history.get(target).cloned().unwrap_or(0)
 	}
 
-	fn buffer_impact(&mut self, target_handle: DamageableHandle) {
-		if self.max_impacts >= 0 && self.get_impact_count(&target_handle) >= self.max_impacts {
+	fn buffer_impact(&mut self, target: DynGd<Node, dyn Damageable>) {
+		if self.max_impacts >= 0 && self.get_impact_count(&target) >= self.max_impacts {
 			return;
 		}
 
-		self.impacts_buffer.insert(target_handle);
+		self.impacts_buffer.insert(target);
 		if ! self.buffered_impacts_flush {
 			self.run_deferred(DamageArea::flush_buffered_impacts);
 			self.buffered_impacts_flush = true;
@@ -127,12 +125,9 @@ impl DamageArea {
 
 	pub fn flush_buffered_impacts(&mut self) {
 		let _buffered = std::mem::take(&mut self.impacts_buffer);
-		for handle in _buffered {
-			if let Some(target) = handle {
-				let history_key = Some(target.clone());
-				self.inflict_upon(target);
-				*self.impacts_history.entry(history_key).or_insert(0) += 1;
-			}
+		for target in _buffered {
+			self.inflict_upon(target.clone());
+			*self.impacts_history.entry(target).or_insert(0) += 1;
 		}
 
 		self.buffered_impacts_flush = false;
@@ -147,14 +142,14 @@ impl DamageArea {
 	#[func]
 	pub fn on_area_entered(&mut self, area: Gd<Area3D>) {
 		if let Ok(damageable) = area.upcast::<Node3D>().try_dynify::<dyn Damageable>() {
-			self.buffer_impact(Some(damageable.upcast::<Node>()));
+			self.buffer_impact(damageable.upcast::<Node>());
 		}
 	}
 
 	#[func]
 	pub fn on_body_entered(&mut self, body: Gd<Node3D>) {
 		if let Ok(damageable) = body.try_dynify::<dyn Damageable>() {
-			self.buffer_impact(Some(damageable.upcast::<Node>()));
+			self.buffer_impact(damageable.upcast::<Node>());
 		}
 	}
 }

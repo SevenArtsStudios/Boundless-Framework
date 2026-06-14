@@ -6,16 +6,3 @@ pub trait Damageable: AttributeHolder {
 	fn apply_damage(&mut self, amount: f32);
 	fn kill(&mut self) { }
 }
-
-pub trait DamageableProvider {
-	fn get_damageable<'a>(&'a mut self) -> Option<&'a mut dyn Damageable>;
-}
-
-impl<T> DamageableProvider for T
-	where
-		T: Damageable
-{
-	fn get_damageable<'a>(&'a mut self) -> Option<&'a mut dyn Damageable> {
-		Some(self)
-	}
-}
