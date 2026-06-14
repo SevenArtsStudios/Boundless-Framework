@@ -64,8 +64,8 @@ impl DamageInstance {
 
 	pub fn scale(
 		&mut self,
-		resistance_trait: &Id,
-		power_trait: &Id,
+		resistance_attribute: &Id,
+		strength_attribute: &Id,
 		allow_negative: bool,
 	) {
 		let target_ref = self.target.lock().unwrap();
@@ -73,8 +73,8 @@ impl DamageInstance {
 
 		self.amount = scale_damage(
 			self.amount(),
-			resistance_trait,
-			power_trait,
+			resistance_attribute,
+			strength_attribute,
 			target_ref.deref(),
 			dealer_ref.as_ref().map(|d| d.deref()),
 			allow_negative,

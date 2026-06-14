@@ -27,14 +27,14 @@ impl GodotDamageInstance {
 	#[func]
 	pub fn scale_damage(
 		&mut self,
-		resistance_trait: GodotId,
-		power_trait: GodotId,
+		resistance_attribute: GodotId,
+		strength_attribute: GodotId,
 		allow_negative: bool,
 	) {
 		self.damage_instance.lock().unwrap()
 			.scale(
-				&resistance_trait.into(),
-				&power_trait.into(),
+				&resistance_attribute.into(),
+				&strength_attribute.into(),
 				allow_negative
 			);
 	}

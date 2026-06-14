@@ -10,7 +10,7 @@ use crate::attribute_provider::GodotAttributeProvider;
 #[class(base=CharacterBody3D, init, tool, rename=Entity)]
 pub struct GodotEntity {
 	#[export]
-	pub traits: Option<Gd<GodotAttributeProvider>>,
+	pub attributes: Option<Gd<GodotAttributeProvider>>,
 
 	#[export]
 	pub health: f32,
@@ -25,7 +25,7 @@ impl GodotEntity {}
 
 impl AttributeHolder for GodotEntity {
 	fn attributes(&self) -> Option<Box<dyn AttributeProvider>> {
-		self.traits.as_ref().map(|gd| {
+		self.attributes.as_ref().map(|gd| {
 			let bound = gd.bind();
 			Box::new((*bound).clone()) as Box<dyn AttributeProvider>
 		})
