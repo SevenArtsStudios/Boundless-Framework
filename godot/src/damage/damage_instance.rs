@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
+use godot::prelude::*;
 
-use boundless::damage::{DamageInstance};
+use boundless::{damage::DamageInstance};
 use godot::register::{GodotClass, godot_api};
 
 use crate::GodotId;
@@ -18,6 +19,9 @@ impl GodotDamageInstance {
 			damage_instance,
 		}
 	}
+	pub fn gd_from(damage_instance: Arc<Mutex<DamageInstance>>) -> Gd<Self> {
+		Gd::from_object(Self::from(damage_instance))
+	}
 
 	#[func]
 	pub fn get_amount(&self) -> f32 {
@@ -31,6 +35,7 @@ impl GodotDamageInstance {
 		strength_attribute: GodotId,
 		allow_negative: bool,
 	) {
+
 		self.damage_instance.lock().unwrap()
 			.scale(
 				&resistance_attribute.into(),

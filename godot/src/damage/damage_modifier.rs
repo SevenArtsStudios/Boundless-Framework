@@ -15,7 +15,7 @@ pub struct GodotDamageModifier {
 #[godot_api]
 impl GodotDamageModifier {
 	#[func(virtual)]
-	pub fn modify_damage(
+	pub fn apply(
 		&self,
 		damage: Gd<GodotDamageInstance>,
 	) {
@@ -23,7 +23,7 @@ impl GodotDamageModifier {
 	}
 
 	#[func(virtual)]
-	pub fn apply_damage(
+	pub fn add_effects(
 		&self,
 		damage: Gd<GodotDamageInstance>
 	) {
@@ -33,31 +33,48 @@ impl GodotDamageModifier {
 
 #[godot_dyn]
 impl DamageModifier for GodotDamageModifier {
-	fn modify(
-		&mut self,
+	fn apply(
+		&self,
 		damage: Arc<Mutex<DamageInstance>>
 	) {
-		let godot_damage = Gd::from_object(GodotDamageInstance::from(damage));
-
-		let _ = self.base_mut().call(
-			"modify_damage",
-			&[
-				Variant::from(godot_damage)
-			],
-		);
+		let godot_damage = GodotDamageInstance::gd_from(damage);
+		let _ = self.apply(godot_damage);
 	}
 
-	fn apply(
-		&mut self,
+	fn add_effects(
+		&self,
 		damage: Arc<Mutex<DamageInstance>>
 	) {
-		let godot_damage = Gd::from_object(GodotDamageInstance::from(damage));
+		let godot_damage = GodotDamageInstance::gd_from(damage);
+		let _ = self.add_effects(godot_damage);
+	}
+}
 
-		let _ = self.base_mut().call(
-			"apply_damage",
-			&[
-				Variant::from(godot_damage)
-			],
-		);
+#[derive(Hash, Eq, PartialEq)]
+pub struct DamageModifierWrapper {
+	modifier: DynGd<Resource, dyn DamageModifier>,
+}
+
+impl DamageModifier for DamageModifierWrapper {
+	fn apply(
+		&self,
+		damage: Arc<Mutex<DamageInstance>>
+	) {
+		self.modifier.dyn_bind().apply(damage)
+	}
+
+	fn add_effects(
+		&self,
+		damage: Arc<Mutex<DamageInstance>>
+	) {
+		self.modifier.dyn_bind().add_effects(damage);
+	}
+}
+
+impl From<DynGd<Resource, dyn DamageModifier>> for DamageModifierWrapper {
+	fn from(value: DynGd<Resource, dyn DamageModifier>) -> Self {
+		Self {
+			modifier: value
+		}
 	}
 }

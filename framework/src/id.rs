@@ -1,3 +1,5 @@
+use core::fmt;
+
 use string_cache::DefaultAtom;
 
 pub(crate) fn normalize_id_name(name: &str) -> String {
@@ -39,5 +41,12 @@ impl From<&str> for Id {
 impl From<String> for Id {
 	fn from(value: String) -> Self {
 		Id::from_unnormalized(value)
+	}
+}
+
+impl fmt::Display for Id {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let str = &*self.id;
+		write!(f, "{str}")
 	}
 }

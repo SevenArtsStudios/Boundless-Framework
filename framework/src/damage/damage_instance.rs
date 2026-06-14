@@ -1,4 +1,5 @@
 use std::ops::Deref;
+use std::slice::Iter;
 use std::sync::{Arc, Mutex};
 
 use crate::damage::scale_damage;
@@ -7,54 +8,48 @@ use crate::{damage::{Damage, DamageDealer, DamageModifier, Damageable}, id::Id};
 #[derive(Clone)]
 pub struct DamageInstance {
 	amount: f32,
-	modifiers: Arc<Mutex<Vec<Arc<Mutex<dyn DamageModifier>>>>>,
+	modifiers: Arc<[Arc<dyn DamageModifier>]>,
 	target: Arc<Mutex<dyn Damageable>>,
 	damage_dealer: Option<Arc<Mutex<dyn DamageDealer>>>,
 }
 
 impl DamageInstance {
 	pub fn from(
-		damage: &mut Damage,
+		damage: &Damage,
 		target: impl Damageable + 'static,
-		damage_dealer: Option<Arc<Mutex<dyn DamageDealer>>>,
-	) -> Self {
-		Self::new(damage.amount, damage.modifiers.clone(), target, damage_dealer)
-	}
-
-	pub fn new(
-		amount: f32,
-		modifiers: Vec<Arc<Mutex<dyn DamageModifier>>>,
-		target: impl Damageable + 'static,
-		damage_dealer: Option<Arc<Mutex<dyn DamageDealer>>>,
+		damage_dealer: Option<impl DamageDealer + 'static>,
 	) -> Self {
 		Self {
-			amount,
-			modifiers: Arc::new(Mutex::new(modifiers)),
+			amount: damage.amount,
+			modifiers: damage.modifiers.clone(),
 			target: Arc::new(Mutex::new(target)),
-			damage_dealer,
+			damage_dealer: damage_dealer.map(|dd| Arc::new(Mutex::new(dd)) as Arc<Mutex<dyn DamageDealer>>)
 		}
 	}
 
 	pub fn inflict(self) {
-		let mods = {
-			let mut m = self.modifiers.lock().unwrap();
-			std::mem::take(&mut *m)
-		};
-
 		let arc = Arc::new(Mutex::new(self));
 
-		for modifier in mods.iter() {
-			modifier.lock().unwrap().modify(arc.clone());
-			modifier.lock().unwrap().apply(arc.clone());
+		let (
+			modifiers,
+			target,
+			damage_dealer
+		) = {
+			let guard = arc.lock().unwrap();
+			(guard.modifiers.clone(), guard.target.clone(), guard.damage_dealer.clone())
+		};
+
+		for modifier in modifiers.iter() {
+			modifier.apply(arc.clone());
+			modifier.add_effects(arc.clone());
 		}
 
-		let m = arc.lock().unwrap();
-		m.modifiers.lock().expect("").extend(mods);
+		target.lock().unwrap().damage(arc.lock().unwrap().deref());
 
-		if let Some(ref dealer_arc) = m.damage_dealer {
+		if let Some(dealer_arc) = damage_dealer {
 			let mut dealer = dealer_arc.lock().unwrap();
-			let target_ref = m.target.lock().unwrap();
-			dealer.award_damage(&arc, &*target_ref);
+			let target_ref = target.lock().unwrap();
+			dealer.award_damage(arc.lock().unwrap().deref(), &*target_ref);
 		}
 	}
 
@@ -81,8 +76,8 @@ impl DamageInstance {
 		);
 	}
 
-	pub fn modifiers(&self) -> Arc<Mutex<Vec<Arc<Mutex<dyn DamageModifier>>>>> {
-		self.modifiers.clone()
+	pub fn modifiers<'a>(&'a self) -> Iter<'a, Arc<dyn DamageModifier>> {
+		self.modifiers.iter()
 	}
 
 	pub fn target(&self) -> Arc<Mutex<dyn Damageable>> {

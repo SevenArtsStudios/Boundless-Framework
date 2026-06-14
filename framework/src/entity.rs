@@ -1,5 +1,5 @@
-use crate::{attributes::AttributeHolder, damage::{DamageDealer, Damageable}};
+use crate::{damage::{DamageDealer, Damageable}};
 
-pub trait Entity: Damageable + DamageDealer + AttributeHolder {
+pub trait Entity: Damageable + DamageDealer {
 
 }

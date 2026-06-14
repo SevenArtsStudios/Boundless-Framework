@@ -1,5 +1,5 @@
 use godot::prelude::*;
-use boundless::{attributes::{AttributeHolder, AttributeProvider}, damage::{Damageable}};
+use boundless::{attributes::{AttributeProvider}, damage::{DamageInstance, Damageable}};
 
 #[derive(Clone)]
 pub struct GodotDamageable(DynGd<Node, dyn Damageable>);
@@ -12,9 +12,9 @@ impl GodotDamageable {
 	}
 }
 
-impl AttributeHolder for GodotDamageable {
-	fn attributes(&self) -> Option<Box<dyn AttributeProvider>> {
-		self.0.dyn_bind().attributes()
+impl AttributeProvider for GodotDamageable {
+	fn get_value(&self, id: &boundless::id::Id) -> Option<f32> {
+		self.0.dyn_bind().get_value(id)
 	}
 }
 
@@ -23,8 +23,8 @@ impl Damageable for GodotDamageable {
 		self.0.dyn_bind().get_health()
 	}
 
-	fn apply_damage(&mut self, amount: f32) {
-		self.0.dyn_bind_mut().apply_damage(amount);
+	fn damage(&mut self, damage: &DamageInstance) {
+		self.0.dyn_bind_mut().damage(damage);
 	}
 
 	fn kill(&mut self) {

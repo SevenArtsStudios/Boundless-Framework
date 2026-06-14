@@ -1,11 +1,11 @@
-use std::{collections::{HashMap, HashSet}, sync::{Arc, Mutex}};
+use std::{collections::{HashMap, HashSet}};
 
 use boundless::{damage::{Damage, DamageDealer, Damageable}};
 use godot::{
 	classes::{Area3D, IArea3D}, prelude::*
 };
 
-use crate::{DamageAreaHitboxBuilder, DamageBuilder, GodotDamageDealer, GodotDamageable, flatten_damage_builders};
+use crate::{DamageAreaHitboxBuilder, GodotDamage, GodotDamageDealer, GodotDamageable, flatten_damage_builders};
 
 
 #[derive(GodotClass)]
@@ -31,7 +31,7 @@ pub struct DamageArea {
 	pub damage_multiplier: f32,
 
 	#[export]
-	pub damage_builders: Array<Gd<DamageBuilder>>,
+	pub damage_builders: Array<Gd<GodotDamage>>,
 
 	#[export]
 	pub damage_dealer: Option<DynGd<Node, dyn DamageDealer>>,
@@ -92,18 +92,17 @@ impl DamageArea {
 		damages
 	}
 
-	pub fn inflict_upon(
+	pub fn inflict(
 		&mut self,
 		target: DynGd<Node, dyn Damageable>,
 	) {
 		let mut damages = self.build_damages();
-		let damage_dealer = self.damage_dealer.as_ref().map(|dealer| {
-			Arc::new(Mutex::new(GodotDamageDealer::from(dealer.clone()))) as Arc<Mutex<dyn DamageDealer>>
-		});
+
 		let godot_target = GodotDamageable::from(target);
+		let damage_dealer = self.damage_dealer.clone().map(GodotDamageDealer::from);
 
 		for damage in &mut damages {
-			damage.inflicted_upon(godot_target.clone(), damage_dealer.clone());
+			damage.inflict(godot_target.clone(), damage_dealer.clone());
 		}
 	}
 
@@ -126,7 +125,7 @@ impl DamageArea {
 	pub fn flush_buffered_impacts(&mut self) {
 		let _buffered = std::mem::take(&mut self.impacts_buffer);
 		for target in _buffered {
-			self.inflict_upon(target.clone());
+			self.inflict(target.clone());
 			*self.impacts_history.entry(target).or_insert(0) += 1;
 		}
 

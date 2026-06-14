@@ -1,9 +1,11 @@
+use std::fmt::Display;
+
 use boundless::id::Id;
 use godot::{meta::{Element, ToArg, conv::ByValue, shape::{GodotElementShape, GodotShape}}, prelude::*, register::info::ParamMetadata};
 
 
 #[derive(GodotClass, Clone, Default, PartialEq, Eq, Hash, Debug)]
-#[class(init, tool)]
+#[class(init, tool, rename=Id)]
 pub struct GodotId {
 	value: Id
 }
@@ -38,20 +40,26 @@ impl GodotId {
 	}
 }
 
-impl Into<Id> for GodotId {
-	fn into(self) -> Id {
-		self.value
-	}
-}
-
 impl From<Id> for GodotId {
 	fn from(value: Id) -> Self {
 		Self { value }
 	}
 }
 
+impl Into<Id> for GodotId {
+	fn into(self) -> Id {
+		self.value
+	}
+}
+
+impl Display for GodotId {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		self.as_id().fmt(f)
+	}
+}
+
 impl GodotConvert for GodotId {
-	type Via = GString;
+	type Via = StringName;
 
 	fn godot_shape() -> GodotShape {
 		Self::SHAPE
@@ -98,6 +106,12 @@ impl Element for GodotId {}
 
 impl From<GString> for GodotId {
 	fn from(value: GString) -> Self {
+		GodotId::from_unnormalized(String::from(value))
+	}
+}
+
+impl From<StringName> for GodotId {
+	fn from(value: StringName) -> Self {
 		GodotId::from_unnormalized(String::from(value))
 	}
 }

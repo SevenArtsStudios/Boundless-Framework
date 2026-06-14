@@ -1,6 +1,7 @@
-use std::sync::{Arc, Mutex};
-use crate::{attributes::AttributeHolder, damage::{DamageInstance, Damageable}};
+use crate::{attributes::AttributeProvider, damage::{DamageInstance, Damageable}};
 
-pub trait DamageDealer: AttributeHolder {
-	fn award_damage(&mut self, _damage: &Arc<Mutex<DamageInstance>>, _target: &dyn Damageable) { }
+pub trait DamageDealer: AttributeProvider {
+	fn award_damage(&mut self, damage: &DamageInstance, target: &dyn Damageable) {
+		let (_, _) = (damage, target);
+	}
 }

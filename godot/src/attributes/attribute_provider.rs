@@ -17,16 +17,7 @@ impl AttributeProvider for GodotAttributeProvider {
 	fn get_value(&self, id: &Id) -> Option<f32> {
 		if let Some(base_value) = self.attributes.get_value(id) {
 			self.modifiers.apply_modifiers(id, base_value)
-		} else {
-			None
-		}
-	}
-}
-
-impl<'a> AttributeProvider for &'a GodotAttributeProvider {
-	fn get_value(&self, id: &Id) -> Option<f32> {
-		if let Some(base_value) = self.attributes.get_value(id) {
-			self.modifiers.apply_modifiers(id, base_value)
+				.or(Some(base_value))
 		} else {
 			None
 		}

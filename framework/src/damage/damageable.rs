@@ -1,8 +1,8 @@
-use crate::{attributes::AttributeHolder};
+use crate::{attributes::AttributeProvider, damage::DamageInstance};
 
-pub trait Damageable: AttributeHolder {
+pub trait Damageable: AttributeProvider {
 	fn get_health(&self) -> Option<f32>;
 
-	fn apply_damage(&mut self, amount: f32);
+	fn damage(&mut self, damage: &DamageInstance);
 	fn kill(&mut self) { }
 }
