@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::{rc::Rc, sync::Mutex};
 use godot::prelude::*;
 
 use boundless::{damage::DamageInstance};
@@ -9,21 +9,22 @@ use crate::GodotId;
 #[derive(GodotClass, Clone)]
 #[class(base=RefCounted, no_init, rename=DamageInstance)]
 pub struct GodotDamageInstance {
-	damage_instance: Arc<Mutex<DamageInstance>>,
+	damage_instance: Rc<Mutex<DamageInstance>>,
 }
 
 #[godot_api]
 impl GodotDamageInstance {
-	pub fn from(damage_instance: Arc<Mutex<DamageInstance>>) -> Self {
+	pub const fn from(damage_instance: Rc<Mutex<DamageInstance>>) -> Self {
 		Self {
 			damage_instance,
 		}
 	}
-	pub fn gd_from(damage_instance: Arc<Mutex<DamageInstance>>) -> Gd<Self> {
+	pub fn gd_from(damage_instance: Rc<Mutex<DamageInstance>>) -> Gd<Self> {
 		Gd::from_object(Self::from(damage_instance))
 	}
 
 	#[func]
+	#[must_use]
 	pub fn get_amount(&self) -> f32 {
 		self.damage_instance.lock().unwrap().amount()
 	}

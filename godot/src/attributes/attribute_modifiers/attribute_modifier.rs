@@ -34,7 +34,8 @@ impl GodotAttributeModifier {
 		self.base().signals().property_list_changed().emit();
 	}
 
-	pub fn as_modifier(&self) -> AttributeModifier {
+	#[must_use]
+	pub const fn as_modifier(&self) -> AttributeModifier {
 		match self.operation {
 			AttributeModifierOperation::Multiply => AttributeModifier::Multiply(self.value, self.is_additive),
 			AttributeModifierOperation::Add => AttributeModifier::Add(self.value),
@@ -45,9 +46,9 @@ impl GodotAttributeModifier {
 	}
 }
 
-impl Into<AttributeModifier> for GodotAttributeModifier {
-	fn into(self) -> AttributeModifier {
-		return self.as_modifier();
+impl From<GodotAttributeModifier> for AttributeModifier {
+	fn from(val: GodotAttributeModifier) -> Self {
+		val.as_modifier()
 	}
 }
 
@@ -65,8 +66,7 @@ impl IResource for GodotAttributeModifier {
 			},
 			Self::IS_INITIAL_PROPERTY => {
 				property.usage = match self.operation {
-					AttributeModifierOperation::MoreThan => PropertyUsageFlags::DEFAULT,
-					AttributeModifierOperation::LessThan => PropertyUsageFlags::DEFAULT,
+					AttributeModifierOperation::MoreThan | AttributeModifierOperation::LessThan => PropertyUsageFlags::DEFAULT,
 					_ => PropertyUsageFlags::NONE,
 				};
 			},

@@ -1,6 +1,7 @@
 use std::ops::Deref;
+use std::rc::Rc;
 use std::slice::Iter;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use crate::damage::scale_damage;
 use crate::{damage::{Damage, DamageDealer, DamageModifier, Damageable}, id::Id};
@@ -8,9 +9,9 @@ use crate::{damage::{Damage, DamageDealer, DamageModifier, Damageable}, id::Id};
 #[derive(Clone)]
 pub struct DamageInstance {
 	amount: f32,
-	modifiers: Arc<[Arc<dyn DamageModifier>]>,
-	target: Arc<Mutex<dyn Damageable>>,
-	damage_dealer: Option<Arc<Mutex<dyn DamageDealer>>>,
+	modifiers: Rc<[Rc<dyn DamageModifier>]>,
+	target: Rc<Mutex<dyn Damageable>>,
+	damage_dealer: Option<Rc<Mutex<dyn DamageDealer>>>,
 }
 
 impl DamageInstance {
@@ -22,38 +23,39 @@ impl DamageInstance {
 		Self {
 			amount: damage.amount,
 			modifiers: damage.modifiers.clone(),
-			target: Arc::new(Mutex::new(target)),
-			damage_dealer: damage_dealer.map(|dd| Arc::new(Mutex::new(dd)) as Arc<Mutex<dyn DamageDealer>>)
+			target: Rc::new(Mutex::new(target)),
+			damage_dealer: damage_dealer.map(|dd| Rc::new(Mutex::new(dd)) as Rc<Mutex<dyn DamageDealer>>)
 		}
 	}
 
 	pub fn inflict(self) {
-		let arc = Arc::new(Mutex::new(self));
+		let rc = Rc::new(Mutex::new(self));
 
 		let (
 			modifiers,
 			target,
 			damage_dealer
 		) = {
-			let guard = arc.lock().unwrap();
+			let guard = rc.lock().unwrap();
 			(guard.modifiers.clone(), guard.target.clone(), guard.damage_dealer.clone())
 		};
 
 		for modifier in modifiers.iter() {
-			modifier.apply(arc.clone());
-			modifier.add_effects(arc.clone());
+			modifier.apply(rc.clone());
+			modifier.add_effects(rc.clone());
 		}
 
-		target.lock().unwrap().damage(arc.lock().unwrap().deref());
+		target.lock().unwrap().damage(rc.lock().unwrap().deref());
 
-		if let Some(dealer_arc) = damage_dealer {
-			let mut dealer = dealer_arc.lock().unwrap();
+		if let Some(dealer_rc) = damage_dealer {
+			let mut dealer = dealer_rc.lock().unwrap();
 			let target_ref = target.lock().unwrap();
-			dealer.award_damage(arc.lock().unwrap().deref(), &*target_ref);
+			dealer.award_damage(rc.lock().unwrap().deref(), &*target_ref);
 		}
 	}
 
-	pub fn amount(&self) -> f32 {
+	#[must_use]
+	pub const fn amount(&self) -> f32 {
 		self.amount
 	}
 
@@ -70,21 +72,25 @@ impl DamageInstance {
 			self.amount(),
 			resistance_attribute,
 			strength_attribute,
-			target_ref.deref(),
-			dealer_ref.as_ref().map(|d| d.deref()),
+			&*target_ref,
+			dealer_ref.as_deref(),
 			allow_negative,
 		);
 	}
 
-	pub fn modifiers<'a>(&'a self) -> Iter<'a, Arc<dyn DamageModifier>> {
+	pub fn modifiers(& self) -> Iter<'_, Rc<dyn DamageModifier>> {
 		self.modifiers.iter()
 	}
 
-	pub fn target(&self) -> Arc<Mutex<dyn Damageable>> {
+	#[must_use]
+	pub fn target(&self) -> Rc<Mutex<dyn Damageable>> {
 		self.target.clone()
 	}
 
-	pub fn damage_dealer(&self) -> Option<Arc<Mutex<dyn DamageDealer>>> {
+	#[must_use]
+	pub fn damage_dealer(&self) -> Option<Rc<Mutex<dyn DamageDealer>>> {
 		self.damage_dealer.clone()
 	}
 }
+
+unsafe impl Sync for DamageInstance {}

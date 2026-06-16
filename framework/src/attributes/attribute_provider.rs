@@ -1,5 +1,5 @@
 use crate::id::Id;
 
 pub trait AttributeProvider {
-	fn get_value(&self, id: &Id) -> Option<f32>;
+	fn get_attribute(&self, id: &Id) -> Option<f32>;
 }

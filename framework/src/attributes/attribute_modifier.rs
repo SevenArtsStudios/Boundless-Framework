@@ -10,13 +10,14 @@ pub enum AttributeModifier {
 }
 
 impl AttributeModifier {
+	#[must_use]
 	pub fn apply_to(&self, base_value: f32) -> f32 {
 		match self {
-			AttributeModifier::Set(value) => *value,
-			AttributeModifier::Multiply(value, _) => base_value * value,
-			AttributeModifier::Add(value) => base_value + *value,
-			AttributeModifier::MoreThan(value, _) => base_value.max(*value),
-			AttributeModifier::LessThan(value, _) => base_value.min(*value),
+			Self::Set(value) => *value,
+			Self::Multiply(value, _) => base_value * value,
+			Self::Add(value) => base_value + *value,
+			Self::MoreThan(value, _) => base_value.max(*value),
+			Self::LessThan(value, _) => base_value.min(*value),
 		}
 	}
 }
@@ -27,10 +28,12 @@ pub struct AttributeModifierEntry {
 }
 
 impl AttributeModifierEntry {
-	pub fn new(modifier: AttributeModifier, strength: f32) -> Self {
+	#[must_use]
+	pub const fn new(modifier: AttributeModifier, strength: f32) -> Self {
 		Self { modifier, strength }
 	}
 
+	#[must_use]
 	pub fn apply_to(&self, base_value: f32) -> f32 {
 		lerp(base_value, self.modifier.apply_to(base_value), self.strength)
 	}
@@ -41,7 +44,7 @@ pub fn apply_modifiers<I: IntoIterator<Item = AttributeModifierEntry>>(modifiers
 	let mut add = 0.0;
 	let mut mult = 1.0;
 
-	for entry in modifiers.into_iter() {
+	for entry in modifiers {
 		match entry.modifier {
 			AttributeModifier::Multiply(value, is_additive) if is_additive => {
 				mult *= lerp(1.0, value, entry.strength);

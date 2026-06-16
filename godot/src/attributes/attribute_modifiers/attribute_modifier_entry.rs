@@ -16,16 +16,16 @@ pub struct GodotAttributeModifierEntry {
 
 impl GodotAttributeModifierEntry {
 	pub fn as_entry(&self) -> AttributeModifierEntry {
-		if let Some(modifier) = &self.modifier {
-			AttributeModifierEntry::new(modifier.bind().as_modifier(), self.multiplier)
-		} else {
-			AttributeModifierEntry::new(AttributeModifier::Multiply(1.0, false), self.multiplier)
-		}
+		self.modifier.as_ref()
+			.map_or_else(
+				|| AttributeModifierEntry::new(AttributeModifier::Multiply(1.0, false), self.multiplier),
+				|modifier| AttributeModifierEntry::new(modifier.bind().as_modifier(), self.multiplier)
+			)
 	}
 }
 
-impl Into<AttributeModifierEntry> for GodotAttributeModifierEntry {
-	fn into(self) -> AttributeModifierEntry {
-		self.as_entry()
+impl From<GodotAttributeModifierEntry> for AttributeModifierEntry {
+	fn from(val: GodotAttributeModifierEntry) -> Self {
+		val.as_entry()
 	}
 }

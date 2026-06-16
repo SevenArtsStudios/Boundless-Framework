@@ -26,11 +26,9 @@ impl Entity for GodotEntity {}
 
 #[godot_dyn]
 impl AttributeProvider for GodotEntity {
-	fn get_value(&self, id: &Id) -> Option<f32> {
-		match &self.attributes {
-			Some(attrs) => attrs.bind().get_value(id),
-			None => None
-		}
+	fn get_attribute(&self, id: &Id) -> Option<f32> {
+		self.attributes.as_ref()
+			.and_then(|attrs| attrs.bind().get_attribute(id))
 	}
 }
 

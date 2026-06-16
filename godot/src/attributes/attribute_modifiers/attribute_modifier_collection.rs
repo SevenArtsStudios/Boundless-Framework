@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map};
 
 use boundless::id::Id;
 
@@ -18,6 +18,7 @@ pub struct AttributeModifierCollection {
 
 #[godot_api]
 impl AttributeModifierCollection {
+	#[must_use]
 	pub fn shape() -> GodotShape {
 		GodotShape::TypedDictionary {
 			key: GodotId::ELEMENT_SHAPE,
@@ -35,13 +36,14 @@ impl AttributeModifierCollection {
 			.entry(id.into())
 			.or_default()
 			.bind_mut()
-			.add(Gd::from_object(GodotAttributeModifierEntry {
+			.add(&Gd::from_object(GodotAttributeModifierEntry {
 				modifier: Some(modifier),
 				multiplier,
 			}));
 	}
 
 	#[func]
+	#[allow(clippy::needless_pass_by_value)]
 	pub fn remove(&mut self, modifier: Gd<GodotAttributeModifier>) -> bool {
 		for modifiers in self.modifiers_by_attribute.values_mut() {
 			let found = modifiers.bind_mut().remove_modifier(&modifier);
@@ -57,11 +59,11 @@ impl AttributeModifierCollection {
 		self.modifiers_by_attribute.remove(id).is_some()
 	}
 
-	pub fn set_multiplier(&mut self, modifier: Gd<GodotAttributeModifier>, multiplier: f32) -> bool {
+	pub fn set_multiplier(&mut self, modifier: &Gd<GodotAttributeModifier>, multiplier: f32) -> bool {
 		for modifiers in self.modifiers_by_attribute.values_mut() {
 
 			for mut entry in modifiers.bind_mut().iter() {
-				let is_match = entry.bind().modifier.as_ref().unwrap() == &modifier;
+				let is_match = entry.bind().modifier.as_ref().unwrap() == modifier;
 				if is_match {
 					entry.bind_mut().multiplier = multiplier;
 					return true;
@@ -78,19 +80,26 @@ impl AttributeModifierCollection {
 		self.modifiers_by_attribute.clear();
 	}
 
+	#[must_use]
 	pub fn apply_modifiers(&self, id: &Id, base_value: f32) -> Option<f32> {
-		let Some(modifiers) = self.modifiers_by_attribute.get(id) else {
-			return None;
-		};
-
+		let modifiers = self.modifiers_by_attribute.get(id)?;
 		modifiers.bind().apply_modifiers(base_value)
+	}
+
+	#[must_use]
+	pub fn iter(&self) -> hash_map::Iter<'_, Id, Gd<AttributeModifierEntries>> {
+		<&Self as IntoIterator>::into_iter(self)
+	}
+	#[must_use]
+	pub fn iter_mut(&mut self) -> hash_map::IterMut<'_, Id, Gd<AttributeModifierEntries>> {
+		<&mut Self as IntoIterator>::into_iter(self)
 	}
 }
 
 
 impl IntoIterator for AttributeModifierCollection {
 	type Item = (Id, Gd<AttributeModifierEntries>);
-	type IntoIter = std::collections::hash_map::IntoIter<Id, Gd<AttributeModifierEntries>>;
+	type IntoIter = hash_map::IntoIter<Id, Gd<AttributeModifierEntries>>;
 
 	fn into_iter(self) -> Self::IntoIter {
 		self.modifiers_by_attribute.into_iter()
@@ -99,7 +108,7 @@ impl IntoIterator for AttributeModifierCollection {
 
 impl<'a> IntoIterator for &'a AttributeModifierCollection {
 	type Item = (&'a Id, &'a Gd<AttributeModifierEntries>);
-	type IntoIter = std::collections::hash_map::Iter<'a, Id, Gd<AttributeModifierEntries>>;
+	type IntoIter = hash_map::Iter<'a, Id, Gd<AttributeModifierEntries>>;
 
 	fn into_iter(self) -> Self::IntoIter {
 		self.modifiers_by_attribute.iter()

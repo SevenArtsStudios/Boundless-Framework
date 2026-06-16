@@ -1,17 +1,17 @@
-use std::sync::{Arc, Mutex};
+use std::{rc::Rc, sync::Mutex};
 use crate::{damage::{DamageDealer, DamageInstance, Damageable}, id::Id};
 
 pub trait DamageModifier {
 	fn apply(
 		&self,
-		damage: Arc<Mutex<DamageInstance>>
+		damage: Rc<Mutex<DamageInstance>>
 	) {
 		let _ = damage;
 	}
 
 	fn add_effects(
 		&self,
-		damage: Arc<Mutex<DamageInstance>>
+		damage: Rc<Mutex<DamageInstance>>
 	) {
 		let _ = damage;
 	}
@@ -29,14 +29,14 @@ pub fn scale_damage(
 	let mut modified_amount: f32 = base_amount;
 
 	if let Some(dealer) = damage_dealer {
-		let mut strength_value = dealer.get_value(strength_attribute).unwrap_or(1.0);
+		let mut strength_value = dealer.get_attribute(strength_attribute).unwrap_or(1.0);
 		if !allow_negative {
 			strength_value = strength_value.max(0.0);
 		}
 		modified_amount *= strength_value;
 	}
 
-	let mut resistance_value = target.get_value(resistance_attribute).unwrap_or(1.0);
+	let mut resistance_value = target.get_attribute(resistance_attribute).unwrap_or(1.0);
 	if !allow_negative {
 		resistance_value = resistance_value.max(0.0);
 	}

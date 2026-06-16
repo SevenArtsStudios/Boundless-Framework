@@ -1,3 +1,5 @@
+use std::vec::IntoIter;
+
 use boundless::attributes::apply_modifiers;
 use godot::{obj::Gd, prelude::GodotClass, builtin::Array};
 
@@ -11,8 +13,8 @@ pub struct AttributeModifierEntries {
 	modifiers: Array<Gd<GodotAttributeModifierEntry>>,
 }
 impl AttributeModifierEntries {
-	pub fn add(&mut self, entry: Gd<GodotAttributeModifierEntry>) {
-		self.modifiers.push(&entry);
+	pub fn add(&mut self, entry: &Gd<GodotAttributeModifierEntry>) {
+		self.modifiers.push(entry);
 	}
 
 	pub fn remove(&mut self, entry: &Gd<GodotAttributeModifierEntry>) -> bool {
@@ -36,6 +38,10 @@ impl AttributeModifierEntries {
 		self.modifiers.len()
 	}
 
+	pub fn is_empty(&self) -> bool {
+		self.modifiers.is_empty()
+	}
+
 	pub fn clear(&mut self) {
 		self.modifiers.clear();
 	}
@@ -43,6 +49,9 @@ impl AttributeModifierEntries {
 
 	pub fn iter(&self) -> impl Iterator<Item = Gd<GodotAttributeModifierEntry>> + '_ {
 		self.modifiers.iter_shared()
+	}
+	pub fn iter_mut(&mut self) -> IntoIter<Gd<GodotAttributeModifierEntry>> {
+		<&mut Self as IntoIterator>::into_iter(self)
 	}
 
 	pub fn apply_modifiers(&self, base_value: f32) -> Option<f32> {
@@ -60,7 +69,7 @@ impl IntoIterator for AttributeModifierEntries {
 	}
 }
 
-impl <'a> IntoIterator for &'a AttributeModifierEntries {
+impl IntoIterator for &AttributeModifierEntries {
 	type Item = Gd<GodotAttributeModifierEntry>;
 	type IntoIter = std::vec::IntoIter<Self::Item>;
 
@@ -69,7 +78,7 @@ impl <'a> IntoIterator for &'a AttributeModifierEntries {
 	}
 }
 
-impl <'a> IntoIterator for &'a mut AttributeModifierEntries {
+impl IntoIterator for &mut AttributeModifierEntries {
 	type Item = Gd<GodotAttributeModifierEntry>;
 	type IntoIter = std::vec::IntoIter<Self::Item>;
 

@@ -16,11 +16,11 @@ pub enum AttributeModifierOperation {
 impl Display for AttributeModifierOperation {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			AttributeModifierOperation::Set => write!(f, "Set"),
-			AttributeModifierOperation::Multiply => write!(f, "Multiply"),
-			AttributeModifierOperation::Add => write!(f, "Add"),
-			AttributeModifierOperation::MoreThan => write!(f, "More Than"),
-			AttributeModifierOperation::LessThan => write!(f, "Less Than"),
+			Self::Set => write!(f, "Set"),
+			Self::Multiply => write!(f, "Multiply"),
+			Self::Add => write!(f, "Add"),
+			Self::MoreThan => write!(f, "More Than"),
+			Self::LessThan => write!(f, "Less Than"),
 		}
 	}
 }

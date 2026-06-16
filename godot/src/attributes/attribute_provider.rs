@@ -1,3 +1,5 @@
+use std::vec;
+
 use godot::prelude::GodotClass;
 
 use boundless::{attributes::AttributeProvider, id::Id};
@@ -13,20 +15,30 @@ pub struct GodotAttributeProvider {
 	pub modifiers: AttributeModifierCollection,
 }
 
+impl GodotAttributeProvider {
+	#[must_use]
+	pub fn iter(&self) -> vec::IntoIter<(Id, f32)> {
+		<&Self as IntoIterator>::into_iter(self)
+	}
+	#[must_use]
+	pub fn iter_mut(&mut self) -> vec::IntoIter<(Id, f32)> {
+		<&mut Self as IntoIterator>::into_iter(self)
+	}
+}
+
 impl AttributeProvider for GodotAttributeProvider {
-	fn get_value(&self, id: &Id) -> Option<f32> {
-		if let Some(base_value) = self.attributes.get_value(id) {
-			self.modifiers.apply_modifiers(id, base_value)
-				.or(Some(base_value))
-		} else {
-			None
-		}
+	fn get_attribute(&self, id: &Id) -> Option<f32> {
+		self.attributes.get_attribute(id)
+			.and_then(|base_value|
+				self.modifiers.apply_modifiers(id, base_value)
+					.or(Some(base_value))
+		)
 	}
 }
 
 impl IntoIterator for GodotAttributeProvider {
 	type Item = (Id, f32);
-	type IntoIter = std::vec::IntoIter<Self::Item>;
+	type IntoIter = vec::IntoIter<Self::Item>;
 
 	fn into_iter(self) -> Self::IntoIter {
 		self.attributes
@@ -42,9 +54,9 @@ impl IntoIterator for GodotAttributeProvider {
 	}
 }
 
-impl <'a> IntoIterator for &'a GodotAttributeProvider {
+impl  IntoIterator for &GodotAttributeProvider {
 	type Item = (Id, f32);
-	type IntoIter = std::vec::IntoIter<Self::Item>;
+	type IntoIter = vec::IntoIter<Self::Item>;
 
 	fn into_iter(self) -> Self::IntoIter {
 		(&self.attributes)
@@ -52,7 +64,7 @@ impl <'a> IntoIterator for &'a GodotAttributeProvider {
 			.map(|(gd_id, base_value)| {
 				let id = gd_id.as_id();
 
-				let modified_value = self.modifiers.apply_modifiers(&id, *base_value)
+				let modified_value = self.modifiers.apply_modifiers(id, *base_value)
 					.unwrap_or(*base_value);
 				(id.clone(), modified_value)
 			})
@@ -61,9 +73,9 @@ impl <'a> IntoIterator for &'a GodotAttributeProvider {
 	}
 }
 
-impl <'a> IntoIterator for &'a mut GodotAttributeProvider {
+impl  IntoIterator for &mut GodotAttributeProvider {
 	type Item = (Id, f32);
-	type IntoIter = std::vec::IntoIter<Self::Item>;
+	type IntoIter = vec::IntoIter<Self::Item>;
 
 	fn into_iter(self) -> Self::IntoIter {
 		(&self.attributes)
@@ -71,7 +83,7 @@ impl <'a> IntoIterator for &'a mut GodotAttributeProvider {
 			.map(|(gd_id, base_value)| {
 				let id = gd_id.as_id();
 
-				let modified_value = self.modifiers.apply_modifiers(&id, *base_value)
+				let modified_value = self.modifiers.apply_modifiers(id, *base_value)
 					.unwrap_or(*base_value);
 				(id.clone(), modified_value)
 			})
