@@ -1,7 +1,6 @@
-use std::{rc::Rc, sync::Mutex};
 use godot::prelude::*;
 
-use boundless::{damage::{DamageInstance, DamageModifier}};
+use boundless::{damage::{DamageInstance, DamageModifier}, sync::{BdlsMutex, BdlsPtr}};
 
 use crate::{GodotDamageInstance};
 
@@ -37,7 +36,7 @@ impl GodotDamageModifier {
 impl DamageModifier for GodotDamageModifier {
 	fn apply(
 		&self,
-		damage: Rc<Mutex<DamageInstance>>
+		damage: BdlsPtr<BdlsMutex<DamageInstance>>
 	) {
 		let godot_damage = GodotDamageInstance::gd_from(damage);
 		self.apply(godot_damage);
@@ -45,7 +44,7 @@ impl DamageModifier for GodotDamageModifier {
 
 	fn add_effects(
 		&self,
-		damage: Rc<Mutex<DamageInstance>>
+		damage: BdlsPtr<BdlsMutex<DamageInstance>>
 	) {
 		let godot_damage = GodotDamageInstance::gd_from(damage);
 		self.add_effects(godot_damage);
@@ -60,14 +59,14 @@ pub struct DamageModifierWrapper {
 impl DamageModifier for DamageModifierWrapper {
 	fn apply(
 		&self,
-		damage: Rc<Mutex<DamageInstance>>
+		damage: BdlsPtr<BdlsMutex<DamageInstance>>
 	) {
 		self.modifier.dyn_bind().apply(damage);
 	}
 
 	fn add_effects(
 		&self,
-		damage: Rc<Mutex<DamageInstance>>
+		damage: BdlsPtr<BdlsMutex<DamageInstance>>
 	) {
 		self.modifier.dyn_bind().add_effects(damage);
 	}

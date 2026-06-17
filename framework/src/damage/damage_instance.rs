@@ -1,17 +1,15 @@
-use std::ops::Deref;
-use std::rc::Rc;
 use std::slice::Iter;
-use std::sync::Mutex;
 
 use crate::damage::scale_damage;
+use crate::sync::{BdlsMutex, BdlsPtr, Lockable};
 use crate::{damage::{Damage, DamageDealer, DamageModifier, Damageable}, id::Id};
 
 #[derive(Clone)]
 pub struct DamageInstance {
 	amount: f32,
-	modifiers: Rc<[Rc<dyn DamageModifier>]>,
-	target: Rc<Mutex<dyn Damageable>>,
-	damage_dealer: Option<Rc<Mutex<dyn DamageDealer>>>,
+	modifiers: BdlsPtr<[BdlsPtr<dyn DamageModifier>]>,
+	target: BdlsPtr<BdlsMutex<dyn Damageable>>,
+	damage_dealer: Option<BdlsPtr<BdlsMutex<dyn DamageDealer>>>,
 }
 
 impl DamageInstance {
@@ -23,34 +21,36 @@ impl DamageInstance {
 		Self {
 			amount: damage.amount,
 			modifiers: damage.modifiers.clone(),
-			target: Rc::new(Mutex::new(target)),
-			damage_dealer: damage_dealer.map(|dd| Rc::new(Mutex::new(dd)) as Rc<Mutex<dyn DamageDealer>>)
+			target: BdlsPtr::new(BdlsMutex::new(target)),
+			damage_dealer: damage_dealer.map(|dd| BdlsPtr::new(BdlsMutex::new(dd)) as BdlsPtr<BdlsMutex<dyn DamageDealer>>)
 		}
 	}
 
 	pub fn inflict(self) {
-		let rc = Rc::new(Mutex::new(self));
+		let shared_damage = BdlsPtr::new(BdlsMutex::new(self));
 
 		let (
 			modifiers,
-			target,
-			damage_dealer
+			shared_target,
+			shared_dealer_opt
 		) = {
-			let guard = rc.lock().unwrap();
-			(guard.modifiers.clone(), guard.target.clone(), guard.damage_dealer.clone())
+			let Ok(damage) = shared_damage.try_lock() else {return};
+			(damage.modifiers.clone(), damage.target.clone(), damage.damage_dealer.clone())
 		};
 
 		for modifier in modifiers.iter() {
-			modifier.apply(rc.clone());
-			modifier.add_effects(rc.clone());
+			modifier.apply(shared_damage.clone());
+			modifier.add_effects(shared_damage.clone());
 		}
 
-		target.lock().unwrap().damage(rc.lock().unwrap().deref());
+		let Ok(damage) = shared_damage.try_lock() else {return};
+		let Ok(mut target) = shared_target.try_lock() else {return};
 
-		if let Some(dealer_rc) = damage_dealer {
-			let mut dealer = dealer_rc.lock().unwrap();
-			let target_ref = target.lock().unwrap();
-			dealer.award_damage(rc.lock().unwrap().deref(), &*target_ref);
+		target.damage(&damage);
+
+		if let Some(dealer_shared) = shared_dealer_opt
+		&& let Ok(mut dealer) = dealer_shared.try_lock() {
+			dealer.award_damage(&damage, &*target);
 		}
 	}
 
@@ -65,8 +65,8 @@ impl DamageInstance {
 		strength_attribute: &Id,
 		allow_negative: bool,
 	) {
-		let target_ref = self.target.lock().unwrap();
-		let dealer_ref = self.damage_dealer.as_ref().map(|d| d.lock().unwrap());
+		let Ok(target_ref) = self.target.try_lock() else {return};
+		let dealer_ref = self.damage_dealer.as_ref().and_then(|some| some.try_lock().ok());
 
 		self.amount = scale_damage(
 			self.amount(),
@@ -78,17 +78,17 @@ impl DamageInstance {
 		);
 	}
 
-	pub fn modifiers(& self) -> Iter<'_, Rc<dyn DamageModifier>> {
+	pub fn modifiers(& self) -> Iter<'_, BdlsPtr<dyn DamageModifier>> {
 		self.modifiers.iter()
 	}
 
 	#[must_use]
-	pub fn target(&self) -> Rc<Mutex<dyn Damageable>> {
+	pub fn target(&self) -> BdlsPtr<BdlsMutex<dyn Damageable>> {
 		self.target.clone()
 	}
 
 	#[must_use]
-	pub fn damage_dealer(&self) -> Option<Rc<Mutex<dyn DamageDealer>>> {
+	pub fn damage_dealer(&self) -> Option<BdlsPtr<BdlsMutex<dyn DamageDealer>>> {
 		self.damage_dealer.clone()
 	}
 }

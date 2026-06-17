@@ -1,17 +1,16 @@
-use std::{rc::Rc, sync::Mutex};
-use crate::{damage::{DamageDealer, DamageInstance, Damageable}, id::Id};
+use crate::{damage::{DamageDealer, DamageInstance, Damageable}, id::Id, sync::{BdlsMutex, BdlsPtr}};
 
 pub trait DamageModifier {
 	fn apply(
 		&self,
-		damage: Rc<Mutex<DamageInstance>>
+		damage: BdlsPtr<BdlsMutex<DamageInstance>>
 	) {
 		let _ = damage;
 	}
 
 	fn add_effects(
 		&self,
-		damage: Rc<Mutex<DamageInstance>>
+		damage: BdlsPtr<BdlsMutex<DamageInstance>>
 	) {
 		let _ = damage;
 	}

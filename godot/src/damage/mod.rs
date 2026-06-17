@@ -10,12 +10,9 @@ pub use damage_instance::*;
 pub use damage_modifier::*;
 pub use area::*;
 
-
-use std::{rc::Rc, sync::Mutex};
-
 use godot::{builtin::Array, classes::Resource, obj::{DynGd, Gd}, prelude::*};
 
-use boundless::damage::{Damage, DamageDealer, DamageModifier, Damageable};
+use boundless::{damage::{Damage, DamageDealer, DamageModifier, Damageable}, sync::{BdlsMutex, BdlsPtr}};
 use itertools::Itertools;
 
 #[derive(GodotClass)]
@@ -36,7 +33,7 @@ impl GodotDamage {
 			self.modifiers.iter_shared()
 				.flatten()
 				.unique()
-				.map(|modifier| Rc::<DamageModifierWrapper>::new(modifier.into()) as Rc<dyn DamageModifier>)
+				.map(|modifier| BdlsPtr::<DamageModifierWrapper>::new(modifier.into()) as BdlsPtr<dyn DamageModifier>)
 		)
 	}
 
@@ -53,7 +50,7 @@ impl GodotDamage {
 			damage_dealer.map(GodotDamageDealer::from)
 		);
 
-		GodotDamageInstance::gd_from(Rc::new(Mutex::new(damage_instance)))
+		GodotDamageInstance::gd_from(BdlsPtr::new(BdlsMutex::new(damage_instance)))
 	}
 
 	#[func]

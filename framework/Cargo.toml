@@ -9,5 +9,9 @@ crate-type = ["rlib"]
 [lints]
 workspace = true
 
+[features]
+default = []
+thread-safe = []
+
 [dependencies]
 string_cache = "0.9.0"

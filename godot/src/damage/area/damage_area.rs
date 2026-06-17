@@ -1,6 +1,6 @@
-use std::{collections::{HashMap, HashSet}, rc::Rc};
+use std::{collections::{HashMap, HashSet}};
 
-use boundless::damage::{Damage, DamageDealer, DamageModifier, Damageable};
+use boundless::{damage::{Damage, DamageDealer, DamageModifier, Damageable}, sync::BdlsPtr};
 use godot::{
 	classes::{Area3D, IArea3D}, prelude::*
 };
@@ -96,7 +96,7 @@ impl DamageArea {
 				builder_ref.modifiers.iter_shared()
 					.flatten()
 					.unique()
-					.map(|modifier| Rc::<DamageModifierWrapper>::new(modifier.into()) as Rc<dyn DamageModifier>),
+					.map(|modifier| BdlsPtr::<DamageModifierWrapper>::new(modifier.into()) as BdlsPtr<dyn DamageModifier>),
 			)
 		}).collect();
 

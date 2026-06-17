@@ -10,20 +10,19 @@ pub use damage_dealer::*;
 pub use damage_dealer_proxy::*;
 pub use damage_modifier::*;
 
-
-use std::{rc::Rc};
+use crate::sync::BdlsPtr;
 
 #[derive(Default)]
 pub struct Damage {
 	pub amount: f32,
-	pub modifiers: Rc<[Rc<dyn DamageModifier>]>,
+	pub modifiers: BdlsPtr<[BdlsPtr<dyn DamageModifier>]>,
 }
 
 impl Damage {
 	#[inline]
 	pub fn new(
 		amount: f32,
-		modifiers: impl IntoIterator<Item = Rc<dyn DamageModifier>>,
+		modifiers: impl IntoIterator<Item = BdlsPtr<dyn DamageModifier>>,
 	) -> Self {
 		Self {
 			amount,
