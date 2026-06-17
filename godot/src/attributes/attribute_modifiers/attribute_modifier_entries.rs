@@ -1,4 +1,4 @@
-use std::vec::IntoIter;
+use std::{vec::IntoIter};
 
 use boundless::attributes::apply_modifiers;
 use godot::{obj::Gd, prelude::GodotClass, builtin::Array};
@@ -26,7 +26,7 @@ impl AttributeModifierEntries {
 		}
 	}
 	pub fn remove_modifier(&mut self, modifier: &Gd<GodotAttributeModifier>) -> bool {
-		if let Some(index) = self.modifiers.iter_shared().position(|e| e.bind().modifier.as_ref().unwrap() == modifier) {
+		if let Some(index) = self.modifiers.iter_shared().position(|e| *e.bind().modifier == *modifier) {
 			self.modifiers.remove(index);
 			true
 		} else {

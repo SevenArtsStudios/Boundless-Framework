@@ -36,10 +36,12 @@ impl AttributeModifierCollection {
 			.entry(id.into())
 			.or_default()
 			.bind_mut()
-			.add(&Gd::from_object(GodotAttributeModifierEntry {
-				modifier: Some(modifier),
-				multiplier,
-			}));
+			.add(&Gd::from_object(
+				GodotAttributeModifierEntry::from(
+					modifier,
+					Some(multiplier),
+				)
+			));
 	}
 
 	#[func]
@@ -63,8 +65,7 @@ impl AttributeModifierCollection {
 		for modifiers in self.modifiers_by_attribute.values_mut() {
 
 			for mut entry in modifiers.bind_mut().iter() {
-				let is_match = entry.bind().modifier.as_ref().unwrap() == modifier;
-				if is_match {
+				if *entry.bind().modifier == *modifier {
 					entry.bind_mut().multiplier = multiplier;
 					return true;
 				}

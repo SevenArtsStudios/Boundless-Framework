@@ -26,7 +26,7 @@ impl Id {
 	#[must_use]
 	pub fn from_normalized(normalized_name: impl AsRef<str>) -> Self {
 		let str = normalized_name.as_ref();
-		assert_eq!(str, normalize_id_name(str), "Id name must be normalized (lowercase, no spaces)");
+		debug_assert_eq!(str, normalize_id_name(str), "Id name must be normalized (lowercase, no spaces)");
 		Self {
 			id: DefaultAtom::from(str),
 		}
