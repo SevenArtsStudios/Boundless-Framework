@@ -27,16 +27,11 @@ impl DamageInstance {
 	}
 
 	pub fn inflict(self) {
-		let shared_damage = BdlsPtr::new(BdlsMutex::new(self));
+		let modifiers = self.modifiers.clone();
+		let shared_target = self.target.clone();
+		let shared_dealer_opt = self.damage_dealer.clone();
 
-		let (
-			modifiers,
-			shared_target,
-			shared_dealer_opt
-		) = {
-			let Ok(damage) = shared_damage.try_lock() else {return};
-			(damage.modifiers.clone(), damage.target.clone(), damage.damage_dealer.clone())
-		};
+		let shared_damage = BdlsPtr::new(BdlsMutex::new(self));
 
 		for modifier in modifiers.iter() {
 			modifier.apply(shared_damage.clone());
