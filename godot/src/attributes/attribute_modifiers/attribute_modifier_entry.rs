@@ -1,36 +1,79 @@
-use boundless::attributes::{AttributeModifierEntry};
+use boundless::attributes::{AttributeModifier, AttributeModifierOperation, ModifiedAttributeValue};
 use godot::{obj::{Gd, OnEditor}, prelude::GodotClass};
 
-use crate::GodotAttributeModifier;
+use crate::{GodotAttributeModifier, GodotId};
 
 
-#[derive(GodotClass)]
-#[class(base=Resource, init, tool, rename=AttributeModifierEntry)]
-pub struct GodotAttributeModifierEntry {
+#[derive(GodotClass, Debug)]
+#[class(base=Resource, init, tool)]
+pub struct AttributeModifierEntry {
+	#[export]
+	pub id: GodotId,
 	#[export]
 	pub modifier: OnEditor<Gd<GodotAttributeModifier>>,
 	#[export]
 	#[init(val=1.0)]
-	pub multiplier: f32,
+	pub strength: f32,
 }
 
-impl GodotAttributeModifierEntry {
-	pub fn from(modifier: Gd<GodotAttributeModifier>, multiplier: Option<f32>) -> Self {
+impl AttributeModifierEntry {
+	pub fn from(id: impl Into<GodotId>, modifier: Gd<GodotAttributeModifier>, strength: Option<f32>) -> Self {
 		let mut sentinel: OnEditor<Gd<GodotAttributeModifier>> = OnEditor::default();
 		sentinel.init(modifier);
 
 		Self {
+			id: id.into(),
 			modifier: sentinel,
-			multiplier: multiplier.unwrap_or(1.0)
+			strength: strength.unwrap_or(1.0)
 		}
-	}
-	pub fn as_entry(&self) -> AttributeModifierEntry {
-		AttributeModifierEntry::new(self.modifier.bind().as_modifier(), self.multiplier)
 	}
 }
 
-impl From<GodotAttributeModifierEntry> for AttributeModifierEntry {
-	fn from(val: GodotAttributeModifierEntry) -> Self {
-		val.as_entry()
+impl AttributeModifier for AttributeModifierEntry {
+	fn apply_to(&self, base_value: f32) -> ModifiedAttributeValue {
+		self.modifier.bind().apply_to(base_value)
+	}
+	fn operation(&self) -> AttributeModifierOperation {
+		self.modifier.bind().operation()
+	}
+	fn strength(&self) -> f32 {
+		self.strength
+	}
+}
+
+impl Clone for AttributeModifierEntry {
+	fn clone(&self) -> Self {
+		Self::from(
+			self.id.clone(),
+			self.modifier.clone(),
+			Some(self.strength)
+		)
+	}
+}
+
+
+pub struct AttributeModifierEntryWrapper(Gd<AttributeModifierEntry>);
+
+impl AttributeModifierEntryWrapper {
+	pub const fn wrap(item: Gd<AttributeModifierEntry>) -> Self {
+		Self(item)
+	}
+}
+
+impl AttributeModifier for AttributeModifierEntryWrapper {
+	fn apply_to(&self, base_value: f32) -> ModifiedAttributeValue {
+		self.0.bind().apply_to(base_value)
+	}
+	fn operation(&self) -> AttributeModifierOperation {
+		self.0.bind().operation()
+	}
+	fn strength(&self) -> f32 {
+		self.0.bind().strength
+	}
+}
+
+impl From<Gd<AttributeModifierEntry>> for AttributeModifierEntryWrapper {
+	fn from(value: Gd<AttributeModifierEntry>) -> Self {
+		Self::wrap(value)
 	}
 }
