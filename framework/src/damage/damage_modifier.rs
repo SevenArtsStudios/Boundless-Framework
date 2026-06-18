@@ -23,25 +23,25 @@ pub fn scale_damage(
 	strength_attribute: &Id,
 	target: &dyn Damageable,
 	damage_dealer: Option<&dyn DamageDealer>,
-	allow_negative: bool,
+	allow_negative: bool
 ) -> f32 {
 	let mut modified_amount: f32 = base_amount;
 
 	if let Some(dealer) = damage_dealer {
-		let mut strength_value = dealer.get_attribute(strength_attribute).unwrap_or(1.0);
-		if !allow_negative {
-			strength_value = strength_value.max(0.0);
-		}
+		let strength_value = dealer.get_attribute(strength_attribute).unwrap_or(1.0);
 		modified_amount *= strength_value;
 	}
 
-	let mut resistance_value = target.get_attribute(resistance_attribute).unwrap_or(1.0);
-	if !allow_negative {
-		resistance_value = resistance_value.max(0.0);
-	}
-	if resistance_value != 0.0 {
+	let resistance_value = target.get_attribute(resistance_attribute).unwrap_or(1.0);
+	if resistance_value == 0.0 {
+		modified_amount = f32::INFINITY;
+	} else {
 		modified_amount /= resistance_value;
 	}
 
-	modified_amount
+	if allow_negative {
+		modified_amount
+	} else {
+		modified_amount.max(0.0)
+	}
 }

@@ -69,7 +69,7 @@ impl DamageInstance {
 			strength_attribute,
 			&*target_ref,
 			dealer_ref.as_deref(),
-			allow_negative,
+			allow_negative
 		);
 	}
 

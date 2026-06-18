@@ -1,4 +1,4 @@
-use boundless::attributes::{AttributeModifier, AttributeModifierOperation, ModifiedAttributeValue};
+use boundless::attributes::{AttributeModifier, AttributeModifierOperator};
 use godot::{obj::{Gd, OnEditor}, prelude::GodotClass};
 
 use crate::{GodotAttributeModifier, GodotId};
@@ -11,7 +11,7 @@ pub struct AttributeModifierEntry {
 	pub id: GodotId,
 	#[export]
 	pub modifier: OnEditor<Gd<GodotAttributeModifier>>,
-	#[export]
+	#[export(range = (0.0, 1.0, 0.005))]
 	#[init(val=1.0)]
 	pub strength: f32,
 }
@@ -30,11 +30,11 @@ impl AttributeModifierEntry {
 }
 
 impl AttributeModifier for AttributeModifierEntry {
-	fn apply_to(&self, base_value: f32) -> ModifiedAttributeValue {
+	fn apply_to(&self, base_value: f32) -> f32 {
 		self.modifier.bind().apply_to(base_value)
 	}
-	fn operation(&self) -> AttributeModifierOperation {
-		self.modifier.bind().operation()
+	fn operator(&self) -> AttributeModifierOperator {
+		self.modifier.bind().operator()
 	}
 	fn strength(&self) -> f32 {
 		self.strength
@@ -61,11 +61,11 @@ impl AttributeModifierEntryWrapper {
 }
 
 impl AttributeModifier for AttributeModifierEntryWrapper {
-	fn apply_to(&self, base_value: f32) -> ModifiedAttributeValue {
+	fn apply_to(&self, base_value: f32) -> f32 {
 		self.0.bind().apply_to(base_value)
 	}
-	fn operation(&self) -> AttributeModifierOperation {
-		self.0.bind().operation()
+	fn operator(&self) -> AttributeModifierOperator {
+		self.0.bind().operator()
 	}
 	fn strength(&self) -> f32 {
 		self.0.bind().strength

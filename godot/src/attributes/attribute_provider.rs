@@ -19,7 +19,7 @@ impl AttributeProvider for GodotAttributeProvider {
 	fn get_attribute(&self, id: &Id) -> Option<f32> {
 		self.attributes.get_attribute(id)
 			.map(|base_value| self.modifiers
-			.iter_attrs(id.clone())
+			.iter_attrs(id)
 			.apply_to(base_value))
 	}
 }

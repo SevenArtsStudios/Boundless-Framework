@@ -38,10 +38,10 @@ impl AttributeModifierCollection {
 		self.array.clear();
 	}
 
-	pub fn iter_attrs(&self, id: Id) -> impl Iterator<Item = AttributeModifierEntryWrapper> {
+	pub fn iter_attrs(&self, id: &Id) -> impl Iterator<Item = AttributeModifierEntryWrapper> {
 		self.array.iter_shared()
 			.flatten()
-			.filter(move |e| *e.bind().id.as_id() == id)
+			.filter(move |e| *e.bind().id.as_id() == *id)
 			.map(AttributeModifierEntryWrapper::wrap)
 	}
 }

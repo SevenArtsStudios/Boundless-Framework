@@ -1,15 +1,15 @@
-use boundless::attributes::{AttributeModifier, AttributeModifierOperation, ModifiedAttributeValue};
+use boundless::attributes::{AttributeModifier, AttributeModifierOperator};
 use godot::{classes::IResource, obj::{Base, WithBaseField}, prelude::*, register::info::{PropertyInfo, PropertyUsageFlags}};
 
-use crate::AttributeModifierOperator;
+use crate::AttributeOperator;
 
 #[derive(GodotClass)]
 #[class(base=Resource, init, tool, rename=AttributeModifier)]
 pub struct GodotAttributeModifier {
 	#[var(set = set_operation)]
 	#[export]
-	#[init(val=AttributeModifierOperator::Multiply)]
-	pub operation: AttributeModifierOperator,
+	#[init(val=AttributeOperator::Multiply)]
+	pub operation: AttributeOperator,
 	#[export]
 	#[init(val=1.0)]
 	pub value: f32,
@@ -29,30 +29,30 @@ impl GodotAttributeModifier {
 	pub const OPERATION_PROPERTY: &'static str = "operation";
 
 	#[func]
-	fn set_operation(&mut self, operation: AttributeModifierOperator) {
+	fn set_operation(&mut self, operation: AttributeOperator) {
 		self.operation = operation;
 		self.base().signals().property_list_changed().emit();
 	}
 }
 
 impl AttributeModifier for GodotAttributeModifier {
-	fn apply_to(&self, base_value: f32) -> ModifiedAttributeValue {
-		ModifiedAttributeValue::Modified(match self.operation {
-			AttributeModifierOperator::Set => self.value,
-			AttributeModifierOperator::Multiply => self.value * base_value,
-			AttributeModifierOperator::Add => base_value + self.value,
-			AttributeModifierOperator::MoreThan => base_value.max(self.value),
-			AttributeModifierOperator::LessThan => base_value.min(self.value),
-		})
+	fn apply_to(&self, base_value: f32) -> f32 {
+		match self.operation {
+			AttributeOperator::Set => self.value,
+			AttributeOperator::Multiply => self.value * base_value,
+			AttributeOperator::Add => base_value + self.value,
+			AttributeOperator::MoreThan => base_value.max(self.value),
+			AttributeOperator::LessThan => base_value.min(self.value),
+		}
 	}
 
-	fn operation(&self) -> AttributeModifierOperation {
+	fn operator(&self) -> AttributeModifierOperator {
 		match self.operation {
-			AttributeModifierOperator::Set => AttributeModifierOperation::Set { to: self.value },
-			AttributeModifierOperator::Multiply => AttributeModifierOperation::Multiply { with: self.value, stacking: self.is_stacking },
-			AttributeModifierOperator::Add => AttributeModifierOperation::Add { value: self.value },
-			AttributeModifierOperator::MoreThan => AttributeModifierOperation::MoreThan { minimum: self.value, deferred: self.is_deferred },
-			AttributeModifierOperator::LessThan => AttributeModifierOperation::LessThan { maximum: self.value, deferred: self.is_deferred },
+			AttributeOperator::Set => AttributeModifierOperator::Set,
+			AttributeOperator::Multiply => AttributeModifierOperator::Multiply { stacking: self.is_stacking },
+			AttributeOperator::Add => AttributeModifierOperator::Add,
+			AttributeOperator::MoreThan => AttributeModifierOperator::MoreThan { deferred: self.is_deferred },
+			AttributeOperator::LessThan => AttributeModifierOperator::LessThan { deferred: self.is_deferred },
 		}
 	}
 }
@@ -65,13 +65,13 @@ impl IResource for GodotAttributeModifier {
 		match property.property_name.to_string().as_str() {
 			Self::IS_STACKING_PROPERTY => {
 				property.usage = match self.operation {
-					AttributeModifierOperator::Multiply => PropertyUsageFlags::DEFAULT,
+					AttributeOperator::Multiply => PropertyUsageFlags::DEFAULT,
 					_ => PropertyUsageFlags::NONE,
 				}
 			},
 			Self::IS_DEFERRED_PROPERTY => {
 				property.usage = match self.operation {
-					AttributeModifierOperator::MoreThan | AttributeModifierOperator::LessThan => PropertyUsageFlags::DEFAULT,
+					AttributeOperator::MoreThan | AttributeOperator::LessThan => PropertyUsageFlags::DEFAULT,
 					_ => PropertyUsageFlags::NONE,
 				};
 			},
@@ -89,11 +89,11 @@ impl GodotAttributeModifierWrapper {
 }
 
 impl AttributeModifier for GodotAttributeModifierWrapper {
-	fn apply_to(&self, base_value: f32) -> ModifiedAttributeValue {
+	fn apply_to(&self, base_value: f32) -> f32 {
 		self.0.bind().apply_to(base_value)
 	}
-	fn operation(&self) -> AttributeModifierOperation {
-		self.0.bind().operation()
+	fn operator(&self) -> AttributeModifierOperator {
+		self.0.bind().operator()
 	}
 	fn strength(&self) -> f32 {
 		self.0.bind().strength()

@@ -33,9 +33,8 @@ impl GodotDamageInstance {
 		&mut self,
 		resistance_attribute: GodotId,
 		strength_attribute: GodotId,
-		allow_negative: bool,
+		#[opt(default=false)] allow_negative: bool,
 	) {
-
 		self.damage_instance.borrow_mut()
 			.scale(
 				&resistance_attribute.into(),
