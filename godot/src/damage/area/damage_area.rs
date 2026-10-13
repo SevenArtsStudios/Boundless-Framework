@@ -88,35 +88,27 @@ impl DamageArea {
 		self
 	}
 
-	pub fn build_damages(&self) -> Vec<Damage> {
-		let mut damages: Vec<Damage> = self.damage_builders.iter_shared().map(|builder| {
+	pub fn iter_damages(&self) -> impl Iterator<Item = Damage> + '_ {
+		self.damage_builders.iter_shared().map(|builder| {
 			let builder_ref = builder.bind();
 			Damage::new(
-				builder_ref.amount,
+				builder_ref.amount * self.damage_multiplier,
 				builder_ref.modifiers.iter_shared()
 					.flatten()
 					.unique()
 					.map(|modifier| BdlsPtr::<DamageModifierWrapper>::new(modifier.into()) as BdlsPtr<dyn DamageModifier>),
 			)
-		}).collect();
-
-		for damage in &mut damages {
-			damage.amount *= self.damage_multiplier;
-		}
-
-		damages
+		})
 	}
 
 	pub fn inflict(
 		&mut self,
 		target: DynGd<Node, dyn Damageable>,
 	) {
-		let mut damages = self.build_damages();
-
 		let godot_target = GodotDamageable::from(target);
 		let damage_dealer = self.damage_dealer.clone().map(GodotDamageDealer::from);
 
-		for damage in &mut damages {
+		for damage in self.iter_damages() {
 			damage.inflict(godot_target.clone(), damage_dealer.clone());
 		}
 	}
