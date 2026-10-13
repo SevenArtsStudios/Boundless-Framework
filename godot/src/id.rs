@@ -26,10 +26,15 @@ impl GodotId {
 		}
 	}
 
+	/// # Safety
+	///
+	/// The caller must ensure that the given string `normalized_name` is normalized (lowercase, no spaces).
 	#[must_use]
-	pub fn from_normalized(normalized_name: &str) -> Self {
-		Self {
-			value: Id::from_normalized(normalized_name)
+	pub unsafe fn from_normalized(normalized_name: &str) -> Self {
+		unsafe {
+			Self {
+				value: Id::from_normalized(normalized_name)
+			}
 		}
 	}
 

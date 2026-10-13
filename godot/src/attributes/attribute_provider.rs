@@ -1,5 +1,3 @@
-use std::vec;
-
 use godot::prelude::*;
 
 use boundless::{attributes::{AttributeProvider, TraitModifierIterator}, id::Id};

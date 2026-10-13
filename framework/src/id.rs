@@ -19,12 +19,15 @@ impl Id {
 		}
 	}
 
+	/// # Safety
+	///
+	/// The caller must ensure that the given string `normalized_name` is normalized (lowercase, no spaces).
 	/// # Panics
 	///
 	/// Will panic if given string `normalized_name` is not normalized.
 	/// When in doubt, use `from_unnormalized()`
 	#[must_use]
-	pub fn from_normalized(normalized_name: impl AsRef<str>) -> Self {
+	pub unsafe fn from_normalized(normalized_name: impl AsRef<str>) -> Self {
 		let str = normalized_name.as_ref();
 		debug_assert_eq!(str, normalize_id_name(str), "Id name must be normalized (lowercase, no spaces)");
 		Self {
