@@ -3,12 +3,12 @@ use godot::classes::rendering_device::{DrawFlags, UniformType};
 use godot::classes::{RdUniform, RenderingDevice};
 use godot::obj::{Gd, NewGd};
 
-use crate::water::underwater_effect::projection_utils;
+use crate::rendering::{packing::packed_bytes_from_projection};
 
 #[allow(clippy::too_many_arguments)]
 #[inline]
 pub(crate) fn run_render_mask_pass(
-	rd: &mut Gd<RenderingDevice>,
+	rd: &mut RenderingDevice,
 	water_framebuffer: Rid,
 	render_pipeline: Rid,
 	render_shader: Rid,
@@ -46,7 +46,7 @@ pub(crate) fn run_render_mask_pass(
 		return false;
 	}
 
-	let render_push: PackedByteArray = projection_utils::pack_projection(world_to_clip);
+	let render_push: PackedByteArray = packed_bytes_from_projection(world_to_clip);
 
 	let mut clear_colors = PackedColorArray::new();
 	clear_colors.push(Color::from_rgba(0.0, 0.0, 0.0, 0.0));

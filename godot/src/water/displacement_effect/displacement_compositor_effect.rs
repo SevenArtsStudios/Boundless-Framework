@@ -1,6 +1,6 @@
-use godot::{classes::{CompositorEffect, ICompositorEffect, RdSamplerState, RdShaderSource, RdTextureFormat, RdTextureView, RenderData, RenderingDevice, RenderingServer, Texture2Drd, Time, compositor_effect::EffectCallbackType, notify::ObjectNotification, rendering_device::{DataFormat, SamplerFilter, SamplerRepeatMode, ShaderLanguage, ShaderStage, TextureSamples, TextureType, TextureUsageBits}}, prelude::*};
+use godot::{classes::{CompositorEffect, ICompositorEffect, RdSamplerState, RdTextureFormat, RdTextureView, RenderData, RenderingDevice, RenderingServer, Texture2Drd, Time, compositor_effect::EffectCallbackType, notify::ObjectNotification, rendering_device::{DataFormat, SamplerFilter, SamplerRepeatMode, ShaderLanguage, ShaderStage, TextureSamples, TextureType, TextureUsageBits}}, prelude::*};
 
-use crate::displacement_effect::{compute_pass, fetch_pass};
+use crate::{rendering::{create_shader_from_source}, displacement_effect::{compute_pass, fetch_pass}};
 
 
 pub(crate) const BUILTIN_COMPUTE_WATER_DISPLACEMENT_GLSL: &str =
@@ -14,14 +14,13 @@ pub(crate) const BUILTIN_FETCH_WATER_DISPLACEMENT_GLSL: &str =
 pub struct WaterDisplacementEffect {
 	base: Base<CompositorEffect>,
 
-	#[var(get = get_texture, set = set_texture)]
+	#[var(get = get_render_texture, set = set_render_texture)]
 	#[export]
-	texture: Option<Gd<Texture2Drd>>,
+	render_texture: Option<Gd<Texture2Drd>>,
 
 	#[export]
 	fetch_water_displacement: bool,
 
-	rendering_device: Option<Gd<RenderingDevice>>,
 	compute_shader: Rid,
 	compute_pipeline: Rid,
 	fetch_shader: Rid,
@@ -30,22 +29,66 @@ pub struct WaterDisplacementEffect {
 	water_displacement_map: Rid,
 }
 
+impl WaterDisplacementEffect {
+	fn run(&mut self, effect_callback_type: i32, _render_data: Option<Gd<RenderData>>) -> Result<(), &'static str> {
+		if effect_callback_type != EffectCallbackType::PRE_TRANSPARENT.ord() {
+			return Err("Effect callback type is not PRE_TRANSPARENT");
+		}
+
+		if !self.compute_pipeline.is_valid() || !self.compute_shader.is_valid() {
+			return Err("Effect is not properly initialized");
+		}
+
+		let rs = RenderingServer::singleton();
+
+		let Some(mut rendering_device) = rs.get_rendering_device() else {
+			return Err("Rendering_device is not available");
+		};
+		let rd = &mut *rendering_device;
+
+
+		if !self.water_displacement_map.is_valid() {
+			self.construct_displacement_map(rd);
+		}
+		if !self.water_displacement_map.is_valid() {
+			return Err("Water_displacement_map is not valid");
+		}
+
+		let render_size = Vector2i::new(128, 128);
+		let t = Time::singleton().get_ticks_msec() as f32 / 1000.0;
+		compute_pass::run_displacement_compute_pass(
+			rd,
+			self.compute_pipeline,
+			self.compute_shader,
+			self.water_displacement_map,
+			render_size,
+			t,
+		);
+
+		if self.fetch_water_displacement {
+			fetch_pass::run_fetch_displacement_pass(
+				rd,
+				self.fetch_pipeline,
+				self.fetch_shader,
+				self.displacement_sampler,
+				self.water_displacement_map,
+			);
+		}
+
+		Ok(())
+	}
+}
+
 #[godot_api]
 impl ICompositorEffect for WaterDisplacementEffect {
 	fn init(base: Base<CompositorEffect>) -> Self {
-		let rendering_device = RenderingServer::singleton().get_rendering_device();
-		if rendering_device.is_none() {
-			godot_error!("WaterDisplacementEffect disabled: RenderingDevice unavailable");
-		}
-
 		let mut init_base = base.to_init_gd();
 		init_base.set_effect_callback_type(EffectCallbackType::PRE_TRANSPARENT);
 
 		let mut effect = Self {
 			base,
-			texture: None,
+			render_texture: None,
 			fetch_water_displacement: false,
-			rendering_device,
 			compute_shader: Rid::Invalid,
 			compute_pipeline: Rid::Invalid,
 			fetch_shader: Rid::Invalid,
@@ -68,57 +111,17 @@ impl ICompositorEffect for WaterDisplacementEffect {
 		}
 	}
 
-	fn render_callback(&mut self, effect_callback_type: i32, _render_data: Option<Gd<RenderData>>) {
-		if effect_callback_type != EffectCallbackType::PRE_TRANSPARENT.ord() {
-			return;
-		}
-
-		if !self.compute_pipeline.is_valid() || !self.compute_shader.is_valid() {
-			return;
-		}
-
-		if !self.water_displacement_map.is_valid() {
-			self.construct_displacement_map();
-		}
-		if !self.water_displacement_map.is_valid() {
-			return;
-		}
-
-		let Some(rd) = self.rendering_device.as_mut() else {
-			return;
-		};
-
-		let render_size = Vector2i::new(128, 128);
-		let t = Time::singleton().get_ticks_msec() as f32 / 1000.0;
-		compute_pass::run_displacement_compute_pass(
-			rd,
-			self.compute_pipeline,
-			self.compute_shader,
-			self.water_displacement_map,
-			render_size,
-			t,
-		);
-
-		if self.fetch_water_displacement {
-			fetch_pass::run_fetch_displacement_pass(
-				rd,
-				self.fetch_pipeline,
-				self.fetch_shader,
-				self.displacement_sampler,
-				self.water_displacement_map,
-			);
-		}
+	fn render_callback(&mut self, effect_callback_type: i32, render_data: Option<Gd<RenderData>>) {
+		self.run(effect_callback_type, render_data).unwrap_or_else(|err| {
+			self.base_mut().set_enabled(false);
+			godot_error!("WaterDisplacementEffect render_callback error: {}", err);
+		});
 	}
 }
 
 #[godot_api]
 impl WaterDisplacementEffect {
-	fn construct_sampler(&mut self) {
-		let Some(rd) = self.rendering_device.as_mut() else {
-
-			return;
-		};
-
+	fn construct_sampler(&mut self, rd: &mut RenderingDevice) {
 		let mut sampler_state = RdSamplerState::new_gd();
 		sampler_state.set_min_filter(SamplerFilter::LINEAR);
 		sampler_state.set_mag_filter(SamplerFilter::LINEAR);
@@ -129,47 +132,59 @@ impl WaterDisplacementEffect {
 		self.displacement_sampler = rd.sampler_create(&sampler_state);
 	}
 
-	fn construct_compute_pipeline(&mut self) {
-		let Some(rd) = self.rendering_device.as_mut() else {
-			return;
-		};
-
-		let mut shader_source = RdShaderSource::new_gd();
-		shader_source.set_stage_source(ShaderStage::COMPUTE, BUILTIN_COMPUTE_WATER_DISPLACEMENT_GLSL);
-		shader_source.set_language(ShaderLanguage::GLSL);
-
-		self.compute_shader = rd.shader_compile_spirv_from_source(&shader_source)
-			.map_or(Rid::Invalid, |spirv| rd.shader_create_from_spirv(&spirv));
-
+	fn construct_compute_pipeline(&mut self, rd: &mut RenderingDevice) {
+		self.compute_shader = create_shader_from_source(
+			rd,
+			BUILTIN_COMPUTE_WATER_DISPLACEMENT_GLSL,
+			ShaderStage::COMPUTE,
+			ShaderLanguage::GLSL
+		);
 
 		if self.compute_shader.is_valid() {
 			self.compute_pipeline = rd.compute_pipeline_create(self.compute_shader);
 		}
 	}
+	fn destruct_compute_pipeline(&mut self) {
+		let mut rs = RenderingServer::singleton();
 
-	fn construct_fetch_pipeline(&mut self) {
-		let Some(rd) = self.rendering_device.as_mut() else {
-			return;
-		};
+		if self.compute_pipeline.is_valid() {
+			rs.free_rid(self.compute_pipeline);
+		}
+		self.compute_pipeline = Rid::Invalid;
 
-		let mut shader_source = RdShaderSource::new_gd();
-		shader_source.set_stage_source(ShaderStage::COMPUTE, BUILTIN_FETCH_WATER_DISPLACEMENT_GLSL);
-		shader_source.set_language(ShaderLanguage::GLSL);
+		if self.compute_shader.is_valid() {
+			rs.free_rid(self.compute_shader);
+		}
+		self.compute_shader = Rid::Invalid;
+	}
 
-		self.fetch_shader = rd.shader_compile_spirv_from_source(&shader_source)
-			.map_or(Rid::Invalid, |spirv| rd.shader_create_from_spirv(&spirv));
-
+	fn construct_fetch_pipeline(&mut self, rd: &mut RenderingDevice) {
+		self.fetch_shader = create_shader_from_source(
+			rd,
+			BUILTIN_FETCH_WATER_DISPLACEMENT_GLSL,
+			ShaderStage::COMPUTE,
+			ShaderLanguage::GLSL
+		);
 
 		if self.fetch_shader.is_valid() {
 			self.fetch_pipeline = rd.compute_pipeline_create(self.fetch_shader);
 		}
 	}
+	fn destruct_fetch_pipeline(&mut self) {
+		let mut rs = RenderingServer::singleton();
 
-	fn construct_displacement_map(&mut self) {
-		let Some(rd) = self.rendering_device.as_mut() else {
-			return;
-		};
+		if self.fetch_pipeline.is_valid() {
+			rs.free_rid(self.fetch_pipeline);
+		}
+		self.fetch_pipeline = Rid::Invalid;
 
+		if self.fetch_shader.is_valid() {
+			rs.free_rid(self.fetch_shader);
+		}
+		self.fetch_shader = Rid::Invalid;
+	}
+
+	fn construct_displacement_map(&mut self, rd: &mut RenderingDevice) {
 		if self.water_displacement_map.is_valid() {
 			return;
 		}
@@ -189,66 +204,55 @@ impl WaterDisplacementEffect {
 		let view = RdTextureView::new_gd();
 		self.water_displacement_map = rd.texture_create(&format, &view);
 
-		if let Some(texture) = self.texture.as_mut() {
+		if let Some(texture) = self.render_texture.as_mut() {
 			texture.set_texture_rd_rid(self.water_displacement_map);
 		}
 	}
 
 	fn construct(&mut self) {
-		self.construct_sampler();
-		self.construct_compute_pipeline();
-		self.construct_fetch_pipeline();
-		self.construct_displacement_map();
+		let rs = RenderingServer::singleton();
+		if let Some(rd) = rs.get_rendering_device().as_deref_mut() {
+			self.construct_sampler(rd);
+			self.construct_compute_pipeline(rd);
+			self.construct_fetch_pipeline(rd);
+			self.construct_displacement_map(rd);
+		}
 	}
 
 	fn destruct(&mut self) {
-		let Some(rd) = self.rendering_device.as_mut() else {
-			return;
-		};
+		let mut rs = RenderingServer::singleton();
 
-		if let Some(texture) = self.texture.as_mut() {
+		if let Some(texture) = self.render_texture.as_mut() {
 			texture.set_texture_rd_rid(Rid::Invalid);
 		}
 
 		if self.displacement_sampler.is_valid() {
-			rd.free_rid(self.displacement_sampler);
+			rs.free_rid(self.displacement_sampler);
 			self.displacement_sampler = Rid::Invalid;
 		}
 		if self.water_displacement_map.is_valid() {
-			rd.free_rid(self.water_displacement_map);
+			rs.free_rid(self.water_displacement_map);
 			self.water_displacement_map = Rid::Invalid;
 		}
-		if self.compute_pipeline.is_valid() {
-			rd.free_rid(self.compute_pipeline);
-			self.compute_pipeline = Rid::Invalid;
-		}
-		if self.fetch_pipeline.is_valid() {
-			rd.free_rid(self.fetch_pipeline);
-			self.fetch_pipeline = Rid::Invalid;
-		}
-		if self.compute_shader.is_valid() {
-			rd.free_rid(self.compute_shader);
-			self.compute_shader = Rid::Invalid;
-		}
-		if self.fetch_shader.is_valid() {
-			rd.free_rid(self.fetch_shader);
-			self.fetch_shader = Rid::Invalid;
-		}
+
+		self.destruct_compute_pipeline();
+		self.destruct_fetch_pipeline();
+	}
+
+
+	#[func]
+	fn get_render_texture(&self) -> Option<Gd<Texture2Drd>> {
+		self.render_texture.clone()
 	}
 
 	#[func]
-	fn get_texture(&self) -> Option<Gd<Texture2Drd>> {
-		self.texture.clone()
-	}
-
-	#[func]
-	fn set_texture(&mut self, &mut texture: Option<Gd<Texture2Drd>>) {
-		if let Some(old_texture) = self.texture.as_mut() {
+	fn set_render_texture(&mut self, &mut texture: Option<Gd<Texture2Drd>>) {
+		if let Some(old_texture) = self.render_texture.as_mut() {
 			old_texture.set_texture_rd_rid(Rid::Invalid);
 		}
 		if let Some(new_texture) = texture.as_mut() {
 			new_texture.set_texture_rd_rid(self.water_displacement_map);
 		}
-		self.texture = texture;
+		self.render_texture = texture;
 	}
 }

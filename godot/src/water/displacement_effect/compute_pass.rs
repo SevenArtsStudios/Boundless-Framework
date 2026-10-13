@@ -6,7 +6,7 @@ use godot::obj::{Gd, NewGd};
 use crate::rendering::groups_for_size;
 
 pub fn run_displacement_compute_pass(
-	rd: &mut Gd<RenderingDevice>,
+	rd: &mut RenderingDevice,
 	compute_pipeline: Rid,
 	compute_shader: Rid,
 	water_displacement_map: Rid,
@@ -27,11 +27,11 @@ pub fn run_displacement_compute_pass(
 		return;
 	}
 
-	let mut push_values = Vec::with_capacity(4 + 8);
-	push_values.extend_from_slice(&render_size.x.to_ne_bytes());
-	push_values.extend_from_slice(&render_size.y.to_ne_bytes());
-	push_values.extend_from_slice(&time_seconds.to_ne_bytes());
-	push_values.extend_from_slice(&0.2f32.to_ne_bytes());
+	let mut push_values = [0u8; 16];
+	push_values[0..4].copy_from_slice(&render_size.x.to_ne_bytes());
+	push_values[4..8].copy_from_slice(&render_size.y.to_ne_bytes());
+	push_values[8..12].copy_from_slice(&time_seconds.to_ne_bytes());
+	push_values[12..16].copy_from_slice(&0.2f32.to_ne_bytes());
 	let push = PackedByteArray::from(push_values.as_slice());
 
 	rd.draw_command_begin_label("Render Water Displacement", Color::from_rgb(1.0, 1.0, 1.0));

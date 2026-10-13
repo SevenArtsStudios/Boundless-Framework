@@ -1,64 +1,83 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::DefaultHasher;
+use std::collections::{BTreeMap, BTreeSet};
+use std::hash::Hasher;
 
-use godot::builtin::{PackedInt32Array, PackedVector3Array, Callable};
+use godot::builtin::{PackedInt32Array, PackedVector3Array, Callable, Projection};
 use godot::classes::mesh::ArrayType;
 use godot::classes::RenderingServer;
 use godot::meta::ToGodot;
-use godot::obj::{Gd, IndexEnum, InstanceId, Singleton};
+use godot::obj::{Gd, IndexEnum, InstanceId, Singleton, WithBaseField};
 use godot::register::{godot_api, GodotClass};
 
+use crate::projection_to_floats;
 use crate::water::WaterMesh;
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct WaterMeshGpuData {
+	pub vertex_floats: Box<[f32]>,
+	pub indices: Box<[u32]>,
+	pub water_info_floats: Box<[f32]>,
+	pub water_params_floats: Box<[f32]>,
+}
+
+const VERTEX_STRIDE: usize = 4; // x, y, z, mesh_index
+const INDEX_STRIDE: usize = 1; // u32
+const WATER_INFO_STRIDE: usize = 20; // 4x4 projection + intensity + scale + 4 padding
+const WATER_PARAMS_STRIDE: usize = 12; // shallow_color + fog_distance + deep_color + fog_fade + transparency_distance + transparency_fade + 2 padding
+
+#[derive(Debug, Clone, PartialEq, Default)]
+enum WaterMeshDataCache {
+	#[default]
+	Uninitialized,
+	None(u64),
+	Some(WaterMeshGpuData, u64),
+}
 
 #[derive(GodotClass)]
 #[class(singleton, init)]
 pub struct WaterMeshRegistry {
-	water_mesh_ids: HashSet<InstanceId>,
-	water_data: HashMap<InstanceId, (PackedVector3Array, PackedInt32Array)>,
-	scheduled_rebuilds: HashSet<InstanceId>,
+	water_data: BTreeMap<InstanceId, (PackedVector3Array, PackedInt32Array)>,
+	scheduled_rebuilds: BTreeSet<InstanceId>,
+	cached_data: WaterMeshDataCache,
 }
 
 #[godot_api]
 impl WaterMeshRegistry {
 	pub fn add_id(&mut self, id: InstanceId) {
 		// godot_print!("Adding water mesh with ID {} to registry.", id);
-		if self.water_mesh_ids.insert(id) {
-			self.schedule_rebuild_buffers(id);
-			// godot_print!("Added water mesh with ID {} to registry and scheduled buffers rebuild.", id);
-		}
+
+		self.schedule_rebuild_buffers(id);
+		// godot_print!("Added water mesh with ID {} to registry and scheduled buffers rebuild.", id);
 	}
 
 	pub fn remove_id(&mut self, id: &InstanceId) {
 		// godot_print!("Removing water mesh with ID {} from registry.", id);
-		if self.water_mesh_ids.remove(id) {
-			self.clear_buffers(id);
+
+		if self.water_data.remove(id).is_some() {
 			// godot_print!("Removed water mesh with ID {} from registry and cleared its buffers.", id);
 		}
 	}
 
 	pub fn schedule_rebuild_buffers(&mut self, id: InstanceId) {
-		let already_scheduled = ! self.scheduled_rebuilds.is_empty();
-
-		self.scheduled_rebuilds.insert(id);
-		if already_scheduled {
+		if ! self.scheduled_rebuilds.insert(id) {
 			// godot_print!("Rebuild already scheduled, skipping redundant schedule call.");
 			return;
 		}
 
-		// godot_print!("Scheduling water buffers rebuild from schedule_rebuild_buffers.");
-
-		let rebuild_callable = Self::scheduled_rebuild_callable();
-		rebuild_callable.call_deferred(&[]);
+		if self.scheduled_rebuilds.len() == 1 {
+			// godot_print!("Scheduling water buffers rebuild from schedule_rebuild_buffers.");
+			Self::scheduled_rebuild_callable().call_deferred(&[]);
+		}
 	}
 
 	fn scheduled_buffers_rebuild(&mut self) {
 		// godot_print!("Running scheduled water buffers rebuild for {} meshes.", self.scheduled_rebuilds.len());
 
-		let scheduled_ids = self.scheduled_rebuilds.drain().collect::<Vec<_>>();
-		for id in scheduled_ids {
+		let ids = std::mem::take(&mut self.scheduled_rebuilds);
+
+		for id in ids {
 			self.rebuild_buffers(id);
 		}
-
-		self.scheduled_rebuilds.clear();
 	}
 
 	fn rebuild_buffers(&mut self, instance_id: InstanceId) -> bool {
@@ -166,14 +185,176 @@ impl WaterMeshRegistry {
 		Callable::from_class_static("WaterMeshRegistry", "remove").bind(&[instance_id.to_variant()])
 	}
 
-	#[must_use]
-	pub fn get_mesh_ids(&self) -> Vec<InstanceId> {
-		let mut ids = self.water_mesh_ids.iter().copied().collect::<Vec<_>>();
-		ids.sort_by_key(|id| id.to_i64());
-		ids
+
+	pub fn get_mesh_ids(&self) -> impl Iterator<Item = &InstanceId> {
+		self.water_data.keys()
 	}
 	#[must_use]
 	pub fn get_mesh_data(&self, instance_id: &InstanceId) -> Option<&(PackedVector3Array, PackedInt32Array)> {
 		self.water_data.get(instance_id)
+	}
+
+	#[must_use]
+	pub fn len(&self) -> usize {
+		self.water_data.len()
+	}
+	#[must_use]
+	pub fn is_empty(&self) -> bool {
+		self.water_data.is_empty()
+	}
+
+
+	fn build_gpu_data(&self) -> Option<WaterMeshGpuData> {
+		let mesh_count = self.len();
+
+		let mut vertex_floats = Vec::<f32>::new();
+		let mut indices = Vec::<u32>::new();
+		let mut water_info_floats = Vec::<f32>::with_capacity(mesh_count * WATER_INFO_STRIDE);
+		let mut water_params_floats = Vec::<f32>::with_capacity(mesh_count * WATER_PARAMS_STRIDE);
+
+
+		let mut mesh_index: u32 = 0;
+		for mesh_id in self.get_mesh_ids() {
+			let Ok(mesh_obj) = Gd::<WaterMesh>::try_from_instance_id(*mesh_id) else {
+				continue;
+			};
+
+			let mesh = mesh_obj.bind();
+			if ! mesh.base().is_visible_in_tree() {
+				continue;
+			}
+
+			let Some((water_vertices, water_indices)) = self.get_mesh_data(mesh_id) else {
+				continue;
+			};
+
+			let vertex_count = water_vertices.len();
+			let index_count = water_indices.len();
+
+			if vertex_floats.try_reserve_exact(vertex_count * VERTEX_STRIDE).is_err() {
+				break;
+			}
+			if indices.try_reserve_exact(index_count * INDEX_STRIDE).is_err() {
+				break;
+			}
+
+			#[allow(clippy::cast_possible_truncation)]
+			let idx_offset = vertex_floats.len() as u32 / 4;
+			for vertex in water_vertices.as_slice() {
+				vertex_floats.push(vertex.x);
+				vertex_floats.push(vertex.y);
+				vertex_floats.push(vertex.z);
+				vertex_floats.push(f32::from_bits(mesh_index));
+			}
+			for index in water_indices.as_slice() {
+				indices.push(index.cast_unsigned() + idx_offset);
+			}
+
+			let transform = Projection::from(mesh.base().get_global_transform());
+			water_info_floats.extend_from_slice(&projection_to_floats(transform));
+			water_info_floats.push(mesh.water_intensity);
+			water_info_floats.push(mesh.water_scale);
+			water_info_floats.push(0.0);
+			water_info_floats.push(0.0);
+
+			let shallow = mesh.shallow_color.srgb_to_linear();
+			let deep = mesh.deep_color.srgb_to_linear();
+			water_params_floats.push(shallow.r);
+			water_params_floats.push(shallow.g);
+			water_params_floats.push(shallow.b);
+			water_params_floats.push(mesh.fog_distance);
+			water_params_floats.push(deep.r);
+			water_params_floats.push(deep.g);
+			water_params_floats.push(deep.b);
+			water_params_floats.push(mesh.fog_fade);
+			water_params_floats.push(mesh.transparency_distance);
+			water_params_floats.push(mesh.transparency_fade);
+			water_params_floats.push(0.0);
+			water_params_floats.push(0.0);
+
+			mesh_index += 1;
+		}
+
+		if vertex_floats.is_empty() || indices.is_empty() || water_info_floats.is_empty() {
+			return None;
+		}
+
+		Some(WaterMeshGpuData {
+			vertex_floats: vertex_floats.into_boxed_slice(),
+			indices: indices.into_boxed_slice(),
+			water_info_floats: water_info_floats.into_boxed_slice(),
+			water_params_floats: water_params_floats.into_boxed_slice(),
+		})
+	}
+
+	pub const fn get_cached_data(&self) -> Option<&WaterMeshGpuData> {
+		match &self.cached_data {
+			WaterMeshDataCache::Some(data, _) => Some(data),
+			_ => None,
+		}
+	}
+
+
+	fn generate_mesh_data_hash(&self) -> u64 {
+		let mut hasher = DefaultHasher::new();
+		hasher.write_usize(self.water_data.len());
+		for (instance_id, (vertices, indices)) in &self.water_data {
+			hasher.write_i64(instance_id.to_i64());
+			let Ok(mesh_obj) = Gd::<WaterMesh>::try_from_instance_id(*instance_id) else {
+				continue;
+			};
+			if ! mesh_obj.bind().base().is_visible_in_tree() {
+				continue;
+			}
+			let mesh = mesh_obj.bind();
+
+			let transform = Projection::from(mesh.base().get_global_transform());
+			for col in transform.cols {
+				hasher.write(&col.x.to_ne_bytes());
+				hasher.write(&col.y.to_ne_bytes());
+				hasher.write(&col.z.to_ne_bytes());
+				hasher.write(&col.w.to_ne_bytes());
+			}
+			hasher.write(&mesh.water_intensity.to_ne_bytes());
+			hasher.write(&mesh.water_scale.to_ne_bytes());
+
+			let shallow = mesh.shallow_color.srgb_to_linear();
+			let deep = mesh.deep_color.srgb_to_linear();
+			hasher.write(&shallow.r.to_ne_bytes());
+			hasher.write(&shallow.g.to_ne_bytes());
+			hasher.write(&shallow.b.to_ne_bytes());
+			hasher.write(&mesh.fog_distance.to_ne_bytes());
+			hasher.write(&deep.r.to_ne_bytes());
+			hasher.write(&deep.g.to_ne_bytes());
+			hasher.write(&deep.b.to_ne_bytes());
+			hasher.write(&mesh.fog_fade.to_ne_bytes());
+			hasher.write(&mesh.transparency_distance.to_ne_bytes());
+			hasher.write(&mesh.transparency_fade.to_ne_bytes());
+
+			hasher.write_usize(vertices.len());
+			hasher.write_usize(indices.len());
+		}
+
+		hasher.finish()
+	}
+
+	pub fn update_cached_data(&mut self) {
+		let new_hash = self.generate_mesh_data_hash();
+		let cached_hash: Option<u64> = match &self.cached_data {
+			WaterMeshDataCache::Uninitialized => None,
+			WaterMeshDataCache::None(hash) | WaterMeshDataCache::Some(_, hash) => Some(*hash),
+		};
+
+		if cached_hash != Some(new_hash) {
+			self.cached_data = match self.build_gpu_data() {
+				Some(data) => WaterMeshDataCache::Some(data, new_hash),
+				None => WaterMeshDataCache::None(new_hash),
+			};
+		}
+	}
+
+	pub fn get_updated_cached_data(&mut self) -> Option<&WaterMeshGpuData> {
+		self.update_cached_data();
+		self.get_cached_data()
 	}
 }

@@ -1,20 +1,19 @@
-
-
-use godot::builtin::{Array, Projection, Rid, StringName};
+use godot::builtin::{Array, Vector2i, Projection, Rid};
 use godot::classes::compositor_effect::EffectCallbackType;
 use godot::classes::notify::ObjectNotification;
 use godot::classes::rendering_device::{
-	CompareOperator, DataFormat, RenderPrimitive, SamplerFilter, SamplerRepeatMode, ShaderLanguage, ShaderStage, TextureSamples, TextureUsageBits
+	CompareOperator, DataFormat, RenderPrimitive, SamplerFilter, SamplerRepeatMode, ShaderLanguage, ShaderStage, TextureSamples
 };
 use godot::classes::{
-	CompositorEffect, ICompositorEffect, RdAttachmentFormat, RdPipelineColorBlendState, RdPipelineColorBlendStateAttachment, RdPipelineDepthStencilState, RdPipelineMultisampleState, RdPipelineRasterizationState, RdSamplerState, RdShaderFile, RdShaderSource, RdVertexAttribute, RenderData, RenderSceneBuffersRd, RenderingDevice, RenderingServer, Texture2Drd
+	CompositorEffect, ICompositorEffect, RdAttachmentFormat, RdPipelineColorBlendState, RdPipelineColorBlendStateAttachment, RdPipelineDepthStencilState, RdPipelineMultisampleState, RdPipelineRasterizationState, RdSamplerState, RdShaderFile, RdVertexAttribute, RenderData, RenderSceneBuffersRd, RenderingDevice, RenderingServer, Texture2Drd
 };
-use godot::global::godot_error;
-use godot::obj::{Base, EngineBitfield, Gd, NewGd, Singleton};
+use godot::global::{godot_error};
+use godot::obj::{Base, Gd, NewGd, Singleton, WithBaseField};
 use godot::prelude::{godot_api, GodotClass};
 
-use crate::water::{apply_effect_pass, mesh_data, render_mask_pass, textures};
-use crate::rendering::groups_for_size;
+use crate::WaterMeshRegistry;
+use crate::water::{apply_effect_pass, render_mask_pass};
+use crate::rendering::{groups_for_size, shader::{create_shader_from_source, create_shader_from_sources}, buffer::{create_storage_buffer, create_vertex_buffers, create_index_buffers}};
 
 
 pub(crate) const BUILTIN_WATER_MASK_VERTEX_GLSL: &str =
@@ -26,20 +25,48 @@ pub(crate) const BUILTIN_WATER_MASK_FRAGMENT_GLSL: &str =
 pub(crate) const UNDERWATER_EFFECT_GLSL: &str =
 	include_str!("../../assets/shaders/RenderUnderwaterEffect.glsl");
 
+pub(crate) const UNDERWATER_CONTEXT: &str = "UnderwaterEffect";
+pub(crate) const WATER_MASK_NAME: &str = "water_mask";
+pub(crate) const WATER_DEPTH_NAME: &str = "water_depth";
+
+pub(crate) const WATER_MASK_FORMAT: DataFormat = DataFormat::R32G32B32A32_SFLOAT;
+pub(crate) const WATER_MASK_USAGE: u32 = 2u32 | 1u32 | 8u32; // TextureUsageBits::COLOR_ATTACHMENT_BIT | TextureUsageBits::SAMPLING_BIT | TextureUsageBits::STORAGE_BIT;
+
+pub(crate) const WATER_DEPTH_FORMAT: DataFormat = DataFormat::D32_SFLOAT;
+pub(crate) const WATER_DEPTH_USAGE: u32 = 4u32 | 1u32 | 8u32; // TextureUsageBits::DEPTH_STENCIL_ATTACHMENT_BIT | TextureUsageBits::SAMPLING_BIT | TextureUsageBits::STORAGE_BIT;
+
+pub(crate) const WATER_TEXTURES_SAMPLES: TextureSamples = TextureSamples::SAMPLES_1;
+
 
 #[derive(GodotClass)]
 #[class(base = CompositorEffect, tool)]
 pub struct UnderwaterEffect {
+	#[base]
 	base: Base<CompositorEffect>,
 
 	#[var(set = set_render_shader_file)]
 	#[export]
 	render_shader_file: Option<Gd<RdShaderFile>>,
 
+	/// Switching the texture RD RID from a scene-buffer texture is currently broken: <https://github.com/godotengine/godot/issues/118292>
+	/// Otherwise, we would use a `Texture2Drd` as an output for the mask and depth texture buffers for easier user consumption
+
+	// #[var(get = get_water_mask_texture, set = set_water_mask_texture)]
+	// #[export]
+	// water_mask_texture: Option<Gd<Texture2Drd>>,
+	// water_mask_map: Rid,
+
+	// #[var(get = get_water_depth_texture, set = set_water_depth_texture)]
+	// #[export]
+	// water_depth_texture: Option<Gd<Texture2Drd>>,
+	// water_depth_map: Rid,
+
+	#[export]
+	main_view_index: u32,
+
 	#[export]
 	water_displacement_texture: Option<Gd<Texture2Drd>>,
 
-	rendering_device: Option<Gd<RenderingDevice>>,
 	render_shader: Rid,
 	compute_shader: Rid,
 	render_pipeline: Rid,
@@ -50,74 +77,26 @@ pub struct UnderwaterEffect {
 	vertex_format: i64,
 }
 
-#[godot_api]
-impl ICompositorEffect for UnderwaterEffect {
-	fn init(base: Base<CompositorEffect>) -> Self {
-		let rendering_device = RenderingServer::singleton().get_rendering_device();
-		if rendering_device.is_none() {
-			godot_error!("UnderwaterEffect disabled: RenderingDevice unavailable");
-		}
-
-		let mut init_base = base.to_init_gd();
-		init_base.set_effect_callback_type(EffectCallbackType::POST_TRANSPARENT);
-
-		let mut effect = Self {
-			base,
-			render_shader_file: None,
-			water_displacement_texture: None,
-			rendering_device,
-			render_shader: Rid::Invalid,
-			compute_shader: Rid::Invalid,
-			render_pipeline: Rid::Invalid,
-			compute_pipeline: Rid::Invalid,
-			displacement_sampler: Rid::Invalid,
-			depth_sampler: Rid::Invalid,
-			framebuffer_format: -1,
-			vertex_format: -1,
-		};
-
-		if effect.rendering_device.is_none() {
-			return effect;
-		}
-
-		effect.construct_samplers();
-		effect.construct_render_pipeline();
-		effect.construct_compute_pipeline();
-
-		effect
-	}
-
-	fn on_notification(&mut self, what: ObjectNotification) {
-		if what == ObjectNotification::PREDELETE {
-			self.destruct();
-		}
-	}
-
+impl UnderwaterEffect {
 	#[allow(clippy::too_many_lines)]
-	fn render_callback(&mut self, _effect_callback_type: i32, render_data: Option<Gd<RenderData>>) {
+	fn run(&self, _effect_callback_type: i32, render_data: Option<Gd<RenderData>>) -> Result<(), &'static str> {
 		// if effect_callback_type != EffectCallbackType::POST_TRANSPARENT.ord() {
-		// 	return;
+		// 	return Err("Effect callback type is not POST_TRANSPARENT");
 		// }
 
-		let Some(mesh_data) = mesh_data::collect_water_mesh_data() else {
-			return;
-		};
-		if mesh_data.vertex_floats.is_empty() || mesh_data.indices.is_empty() {
-			return;
-		}
+		let rs = RenderingServer::singleton();
 
-		let Some(rd) = self.rendering_device.as_mut() else {
-			godot_error!("UnderwaterEffect render callback called but rendering_device is not available");
-			return;
+		let Some(mut rendering_device) = rs.get_rendering_device() else {
+			return Err("Rendering_device is not available");
 		};
+		let rd = &mut *rendering_device;
 
 		if !self.render_pipeline.is_valid() ||
 		   !self.compute_pipeline.is_valid() ||
 		   !self.render_shader.is_valid() ||
 		   !self.compute_shader.is_valid()
 		{
-			godot_error!("UnderwaterEffect render callback called but effect is not properly initialized");
-			return;
+			return Err("Effect is not properly initialized");
 		}
 
 		let Some(displacement_texture) = self
@@ -125,45 +104,91 @@ impl ICompositorEffect for UnderwaterEffect {
 			.as_ref()
 			.map(|texture| texture.get_texture_rd_rid())
 		else {
-			godot_error!("UnderwaterEffect render callback called but water_displacement_texture is not set");
-			return;
+			return Err("Water_displacement_texture is not set");
 		};
 
 		if !displacement_texture.is_valid() {
-			godot_error!("UnderwaterEffect render callback called but water_displacement_texture is not valid");
-			return;
+			return Err("Water_displacement_texture is not valid");
 		}
 
 		let Some(render_data) = render_data else {
-			godot_error!("UnderwaterEffect render callback called but render_data is not set");
-			return;
+			return Err("Render_data is not set");
 		};
 		let Some(scene_buffers_base) = render_data.get_render_scene_buffers() else {
-			godot_error!("UnderwaterEffect render callback called but render_scene_buffers is not valid");
-			return;
+			return Err("Render_scene_buffers is not valid");
 		};
 		let Ok(mut scene_buffers) = scene_buffers_base.try_cast::<RenderSceneBuffersRd>() else {
-			godot_error!("UnderwaterEffect render callback called but render_scene_buffers is not valid");
-			return;
+			return Err("Render_scene_buffers is not valid");
 		};
 
 		let Some(scene_data) = render_data.get_render_scene_data() else {
-			godot_error!("UnderwaterEffect render callback called but render_scene_data is not valid");
-			return;
+			return Err("Render_scene_data is not valid");
 		};
 
 		let render_size = scene_buffers.get_internal_size();
 		if render_size.x <= 0 || render_size.y <= 0 {
-			godot_error!("UnderwaterEffect render callback called but render_size is invalid");
-			return;
+			return Err("Render_size is invalid");
+		}
+
+		let mut registry = WaterMeshRegistry::singleton();
+		let mut registry_bind = registry.bind_mut();
+
+		let Some(mesh_data) = registry_bind.get_updated_cached_data() else {
+			return Ok(());
+		};
+		if mesh_data.vertex_floats.is_empty() || mesh_data.indices.is_empty() {
+			return Err("Mesh_data is invalid");
 		}
 
 		let view_count = scene_buffers.get_view_count();
-		textures::ensure_water_map_textures(&mut scene_buffers, view_count, render_size);
+
+		#[allow(clippy::cast_possible_truncation)]
+		/* let water_mask_map =  */scene_buffers.create_texture(
+			UNDERWATER_CONTEXT,
+			WATER_MASK_NAME,
+			WATER_MASK_FORMAT,
+			WATER_MASK_USAGE,
+			WATER_TEXTURES_SAMPLES,
+			render_size,
+			view_count,
+			1,
+			true,
+			false,
+		);
+		// if ! rd.texture_is_valid(self.water_mask_map) {
+		// 	// godot_print!("Water Mask invalidated");
+
+		// 	self.water_mask_map = water_mask_map;
+		// 	// if let Some(texture) = self.water_mask_texture.as_mut() {
+		// 	// 	texture.set_texture_rd_rid(self.water_mask_map);
+		// 	// }
+		// }
+
+		#[allow(clippy::cast_possible_truncation)]
+		/* let water_depth_map =  */scene_buffers.create_texture(
+			UNDERWATER_CONTEXT,
+			WATER_DEPTH_NAME,
+			WATER_DEPTH_FORMAT,
+			WATER_DEPTH_USAGE,
+			WATER_TEXTURES_SAMPLES,
+			render_size,
+			view_count,
+			1,
+			true,
+			false,
+		);
+		// if ! rd.texture_is_valid(self.water_depth_map) {
+		// 	// godot_print!("Water Depth invalidated");
+
+		// 	self.water_depth_map = water_depth_map;
+		// 	// if let Some(texture) = self.water_depth_texture.as_mut() {
+		// 	// 	texture.set_texture_rd_rid(self.water_depth_map);
+		// 	// }
+		// }
 
 		#[allow(clippy::cast_possible_truncation)]
 		let vertex_count = (mesh_data.vertex_floats.len() / 4) as u32;
-		let (vertex_buffer, vertex_array) = mesh_data::create_vertex_buffers(
+		let (vertex_buffer, vertex_array) = create_vertex_buffers(
 			rd,
 			&mesh_data.vertex_floats,
 			self.vertex_format,
@@ -176,10 +201,10 @@ impl ICompositorEffect for UnderwaterEffect {
 			if vertex_buffer.is_valid() {
 				rd.free_rid(vertex_buffer);
 			}
-			return;
+			return Err("Vertex buffers are invalid");
 		}
 
-		let (index_buffer, index_array) = mesh_data::create_index_buffers(rd, &mesh_data.indices);
+		let (index_buffer, index_array) = create_index_buffers(rd, &mesh_data.indices);
 		if !index_buffer.is_valid() || !index_array.is_valid() {
 			rd.free_rid(vertex_array);
 			rd.free_rid(vertex_buffer);
@@ -189,11 +214,11 @@ impl ICompositorEffect for UnderwaterEffect {
 			if index_buffer.is_valid() {
 				rd.free_rid(index_buffer);
 			}
-			return;
+			return Err("Index buffers are invalid");
 		}
 
-		let info_buffer = mesh_data::create_storage_buffer(rd, &mesh_data.water_info_floats);
-		let parameters_buffer = mesh_data::create_storage_buffer(rd, &mesh_data.water_params_floats);
+		let info_buffer = create_storage_buffer(rd, &mesh_data.water_info_floats);
+		let parameters_buffer = create_storage_buffer(rd, &mesh_data.water_params_floats);
 		if !info_buffer.is_valid() || !parameters_buffer.is_valid() {
 			rd.free_rid(vertex_array);
 			rd.free_rid(vertex_buffer);
@@ -205,20 +230,15 @@ impl ICompositorEffect for UnderwaterEffect {
 			if parameters_buffer.is_valid() {
 				rd.free_rid(parameters_buffer);
 			}
-			return;
+			return Err("Storage buffers are invalid");
 		}
 
 		let (x_groups, y_groups) = groups_for_size(render_size, 8);
-		let screen_w = (render_size.x - 1).max(1);
-		let screen_h = (render_size.y - 1).max(1);
+		let screen_size = Vector2i::new((render_size.x - 1).max(1), (render_size.y - 1).max(1));
 
 		for view in 0..view_count {
-			let context = StringName::from(textures::UNDERWATER_CONTEXT);
-			let map_name = StringName::from(textures::WATER_MAP_NAME);
-			let depth_name = StringName::from(textures::WATER_DEPTH_NAME);
-
-			let water_map = scene_buffers.get_texture_slice(&context, &map_name, view, 0, 1, 1);
-			let water_depth = scene_buffers.get_texture_slice(&context, &depth_name, view, 0, 1, 1);
+			let water_map = scene_buffers.get_texture_slice(UNDERWATER_CONTEXT, WATER_MASK_NAME, view, 0, 1, 1);
+			let water_depth = scene_buffers.get_texture_slice(UNDERWATER_CONTEXT, WATER_DEPTH_NAME, view, 0, 1, 1);
 			if !water_map.is_valid() || !water_depth.is_valid() {
 				continue;
 			}
@@ -272,7 +292,7 @@ impl ICompositorEffect for UnderwaterEffect {
 				water_map,
 				parameters_buffer,
 				projection,
-				(screen_w, screen_h),
+				screen_size,
 				(x_groups, y_groups),
 			);
 
@@ -285,17 +305,62 @@ impl ICompositorEffect for UnderwaterEffect {
 		rd.free_rid(index_buffer);
 		rd.free_rid(info_buffer);
 		rd.free_rid(parameters_buffer);
+
+		Ok(())
+	}
+}
+
+#[godot_api]
+impl ICompositorEffect for UnderwaterEffect {
+	fn init(base: Base<CompositorEffect>) -> Self {
+
+		let mut init_base = base.to_init_gd();
+		init_base.set_effect_callback_type(EffectCallbackType::POST_TRANSPARENT);
+
+		let mut effect = Self {
+			base,
+			render_shader_file: None,
+			// water_mask_texture: None,
+			// water_mask_map: Rid::Invalid,
+			// water_depth_texture: None,
+			// water_depth_map: Rid::Invalid,
+			main_view_index: 0,
+			water_displacement_texture: None,
+			render_shader: Rid::Invalid,
+			compute_shader: Rid::Invalid,
+			render_pipeline: Rid::Invalid,
+			compute_pipeline: Rid::Invalid,
+			displacement_sampler: Rid::Invalid,
+			depth_sampler: Rid::Invalid,
+			framebuffer_format: -1,
+			vertex_format: -1
+		};
+
+		effect.construct();
+
+		effect
+	}
+
+	fn on_notification(&mut self, what: ObjectNotification) {
+		if what == ObjectNotification::POSTINITIALIZE {
+			self.construct();
+		}
+		else if what == ObjectNotification::PREDELETE {
+			self.destruct();
+		}
+	}
+
+	fn render_callback(&mut self, effect_callback_type: i32, render_data: Option<Gd<RenderData>>) {
+		self.run(effect_callback_type, render_data).unwrap_or_else(|err| {
+			self.base_mut().set_enabled(false);
+			godot_error!("UnderwaterEffect render_callback error: {}", err);
+		});
 	}
 }
 
 #[godot_api]
 impl UnderwaterEffect {
-	fn construct_samplers(&mut self) {
-		let Some(rendering_device) = self.rendering_device.as_mut() else {
-			return;
-		};
-		let rd = rendering_device;
-
+	fn construct_samplers(&mut self, rd: &mut RenderingDevice) {
 		let mut displacement_state = RdSamplerState::new_gd();
 		displacement_state.set_min_filter(SamplerFilter::LINEAR);
 		displacement_state.set_mag_filter(SamplerFilter::LINEAR);
@@ -310,41 +375,39 @@ impl UnderwaterEffect {
 		self.depth_sampler = rd.sampler_create(&depth_state);
 	}
 
-	fn construct_render_pipeline(&mut self) {
-		let Some(rd) = self.rendering_device.as_mut() else {
-			return;
-		};
-
+	fn construct_render_pipeline(&mut self, rd: &mut RenderingDevice) {
 		self.render_shader = if let Some(shader_file) = self.render_shader_file.as_ref() {
 			shader_file.get_spirv()
 				.map_or(Rid::Invalid, |spirv| rd.shader_create_from_spirv(&spirv))
 		} else {
-			let mut shader_source = RdShaderSource::new_gd();
-			shader_source.set_language(ShaderLanguage::GLSL);
-			shader_source.set_stage_source(ShaderStage::VERTEX, BUILTIN_WATER_MASK_VERTEX_GLSL);
-			shader_source.set_stage_source(ShaderStage::FRAGMENT, BUILTIN_WATER_MASK_FRAGMENT_GLSL);
+			create_shader_from_sources(
+				rd,
+				&[
+					(ShaderStage::VERTEX, BUILTIN_WATER_MASK_VERTEX_GLSL),
+					(ShaderStage::FRAGMENT, BUILTIN_WATER_MASK_FRAGMENT_GLSL)
+				],
+				ShaderLanguage::GLSL
+			)
 
-			rd.shader_compile_spirv_from_source(&shader_source)
-				.map_or(Rid::Invalid, |spirv| rd.shader_create_from_spirv(&spirv))
 		};
 		if !self.render_shader.is_valid() {
 			return;
 		}
 
 		let mut water_map_attachment = RdAttachmentFormat::new_gd();
-		water_map_attachment.set_format(DataFormat::R32G32B32A32_SFLOAT);
-		water_map_attachment.set_samples(TextureSamples::SAMPLES_1);
+		water_map_attachment.set_format(WATER_MASK_FORMAT);
+		water_map_attachment.set_samples(WATER_TEXTURES_SAMPLES);
 		#[allow(clippy::cast_possible_truncation)]
 		water_map_attachment.set_usage_flags(
-			(TextureUsageBits::COLOR_ATTACHMENT_BIT | TextureUsageBits::STORAGE_BIT).ord() as u32,
+			WATER_MASK_USAGE,
 		);
 
 		let mut water_depth_attachment = RdAttachmentFormat::new_gd();
-		water_depth_attachment.set_format(DataFormat::D32_SFLOAT);
-		water_depth_attachment.set_samples(TextureSamples::SAMPLES_1);
+		water_depth_attachment.set_format(WATER_DEPTH_FORMAT);
+		water_depth_attachment.set_samples(WATER_TEXTURES_SAMPLES);
 		#[allow(clippy::cast_possible_truncation)]
 		water_depth_attachment.set_usage_flags(
-			TextureUsageBits::DEPTH_STENCIL_ATTACHMENT_BIT.ord() as u32
+			WATER_DEPTH_USAGE
 		);
 
 		let mut attachments = Array::<Gd<RdAttachmentFormat>>::new();
@@ -401,68 +464,69 @@ impl UnderwaterEffect {
 			&blend_state,
 		);
 	}
-
 	fn destruct_render_pipeline(&mut self) {
-		let Some(rd) = self.rendering_device.as_mut() else {
-			return;
-		};
+		let mut rs = RenderingServer::singleton();
 
 		if self.render_pipeline.is_valid() {
-			rd.free_rid(self.render_pipeline);
+			rs.free_rid(self.render_pipeline);
 			self.render_pipeline = Rid::Invalid;
 		}
 		if self.render_shader.is_valid() {
-			rd.free_rid(self.render_shader);
+			rs.free_rid(self.render_shader);
 			self.render_shader = Rid::Invalid;
 		}
 	}
 
-	fn construct_compute_pipeline(&mut self) {
-		let Some(rd) = self.rendering_device.as_mut() else {
-			return;
-		};
-
-		let mut shader_source = RdShaderSource::new_gd();
-		shader_source.set_language(ShaderLanguage::GLSL);
-		shader_source.set_stage_source(ShaderStage::COMPUTE, UNDERWATER_EFFECT_GLSL);
-
-		self.compute_shader = rd.shader_compile_spirv_from_source(&shader_source)
-			.map_or(Rid::Invalid, |spirv| rd.shader_create_from_spirv(&spirv));
+	fn construct_compute_pipeline(&mut self, rd: &mut RenderingDevice) {
+		self.compute_shader = create_shader_from_source(
+			rd,
+			UNDERWATER_EFFECT_GLSL,
+			ShaderStage::COMPUTE,
+			ShaderLanguage::GLSL
+		);
 
 		if self.compute_shader.is_valid() {
 			self.compute_pipeline = rd.compute_pipeline_create(self.compute_shader);
 		}
 	}
+	fn destruct_compute_pipeline(&mut self) {
+		let mut rs = RenderingServer::singleton();
+
+		if self.compute_pipeline.is_valid() {
+			rs.free_rid(self.compute_pipeline);
+		}
+		self.compute_pipeline = Rid::Invalid;
+
+		if self.compute_shader.is_valid() {
+			rs.free_rid(self.compute_shader);
+		}
+		self.compute_shader = Rid::Invalid;
+	}
+
+	fn construct(&mut self) {
+		let rs = RenderingServer::singleton();
+		if let Some(rd) = rs.get_rendering_device().as_deref_mut() {
+			self.construct_samplers(rd);
+			self.construct_render_pipeline(rd);
+			self.construct_compute_pipeline(rd);
+		}
+	}
 
 	fn destruct(&mut self) {
-		let Some(rd) = self.rendering_device.as_mut() else {
-			return;
-		};
+		let mut rs = RenderingServer::singleton();
 
 		if self.displacement_sampler.is_valid() {
-			rd.free_rid(self.displacement_sampler);
+			rs.free_rid(self.displacement_sampler);
 			self.displacement_sampler = Rid::Invalid;
 		}
 		if self.depth_sampler.is_valid() {
-			rd.free_rid(self.depth_sampler);
+			rs.free_rid(self.depth_sampler);
 			self.depth_sampler = Rid::Invalid;
 		}
-		if self.render_pipeline.is_valid() {
-			rd.free_rid(self.render_pipeline);
-			self.render_pipeline = Rid::Invalid;
-		}
-		if self.render_shader.is_valid() {
-			rd.free_rid(self.render_shader);
-			self.render_shader = Rid::Invalid;
-		}
-		if self.compute_pipeline.is_valid() {
-			rd.free_rid(self.compute_pipeline);
-			self.compute_pipeline = Rid::Invalid;
-		}
-		if self.compute_shader.is_valid() {
-			rd.free_rid(self.compute_shader);
-			self.compute_shader = Rid::Invalid;
-		}
+
+		self.destruct_render_pipeline();
+		self.destruct_compute_pipeline();
+
 		self.framebuffer_format = -1;
 		self.vertex_format = -1;
 	}
@@ -470,7 +534,42 @@ impl UnderwaterEffect {
 	#[func]
 	fn set_render_shader_file(&mut self, shader_file: Option<Gd<RdShaderFile>>) {
 		self.destruct_render_pipeline();
-		self.render_shader_file = shader_file;
-		self.construct_render_pipeline();
+
+		if let Some(rd) = RenderingServer::singleton().get_rendering_device().as_deref_mut() {
+			self.render_shader_file = shader_file;
+			self.construct_render_pipeline(rd);
+		}
 	}
+
+	// #[func]
+	// fn get_water_mask_texture(&self) -> Option<Gd<Texture2Drd>> {
+	// 	self.water_mask_texture.clone()
+	// }
+
+	// #[func]
+	// fn set_water_mask_texture(&mut self, &mut texture: Option<Gd<Texture2Drd>>) {
+	// 	if let Some(old_texture) = self.water_mask_texture.as_mut() {
+	// 		old_texture.set_texture_rd_rid(Rid::Invalid);
+	// 	}
+	// 	if let Some(new_texture) = texture.as_mut() && self.water_mask_map.is_valid() {
+	// 		new_texture.set_texture_rd_rid(self.water_mask_map);
+	// 	}
+	// 	self.water_mask_texture = texture;
+	// }
+
+	// #[func]
+	// fn get_water_depth_texture(&self) -> Option<Gd<Texture2Drd>> {
+	// 	self.water_depth_texture.clone()
+	// }
+
+	// #[func]
+	// fn set_water_depth_texture(&mut self, &mut texture: Option<Gd<Texture2Drd>>) {
+	// 	if let Some(old_texture) = self.water_depth_texture.as_mut() {
+	// 		old_texture.set_texture_rd_rid(Rid::Invalid);
+	// 	}
+	// 	if let Some(new_texture) = texture.as_mut() && self.water_depth_map.is_valid() {
+	// 		new_texture.set_texture_rd_rid(self.water_depth_map);
+	// 	}
+	// 	self.water_depth_texture = texture;
+	// }
 }

@@ -1,14 +1,14 @@
-use godot::builtin::{Array, Color, PackedByteArray, Projection, Rid};
+use godot::builtin::{Array, Vector2i, Color, PackedByteArray, Projection, Rid};
 use godot::classes::rendering_device::UniformType;
 use godot::classes::{RdUniform, RenderingDevice};
 use godot::obj::{Gd, NewGd};
 
-use crate::water::underwater_effect::projection_utils;
+use crate::rendering::buffer::projection_to_bytes;
 
 #[allow(clippy::too_many_arguments)]
 #[inline]
 pub(crate) fn run_apply_underwater_pass(
-	rd: &mut Gd<RenderingDevice>,
+	rd: &mut RenderingDevice,
 	compute_pipeline: Rid,
 	compute_shader: Rid,
 	depth_sampler: Rid,
@@ -17,7 +17,7 @@ pub(crate) fn run_apply_underwater_pass(
 	water_map: Rid,
 	parameters_buffer: Rid,
 	projection: Projection,
-	screen_size: (i32, i32),
+	screen_size: Vector2i,
 	groups: (u32, u32),
 ) {
 	let mut uniforms_set0 = Array::<Gd<RdUniform>>::new();
@@ -73,13 +73,14 @@ pub(crate) fn run_apply_underwater_pass(
 		return;
 	}
 
-	let mut compute_push_values = Vec::<u8>::with_capacity(18 * 4 + 8);
-	projection_utils::append_projection_bytes(&mut compute_push_values, projection.inverse());
-	compute_push_values.extend_from_slice(&projection.z_near().to_ne_bytes());
-	compute_push_values.extend_from_slice(&projection.z_far().to_ne_bytes());
-	compute_push_values.extend_from_slice(&screen_size.0.to_ne_bytes());
-	compute_push_values.extend_from_slice(&screen_size.1.to_ne_bytes());
-	let compute_push = PackedByteArray::from(compute_push_values.as_slice());
+	let mut compute_push_values = [0u8; 16 * 4 + 16];
+	let projection_bytes = projection_to_bytes(projection);
+	compute_push_values[0..64].copy_from_slice(&projection_bytes);
+	compute_push_values[64..64 + 4].copy_from_slice(&projection.z_near().to_ne_bytes());
+	compute_push_values[64 + 4..64 + 8].copy_from_slice(&projection.z_far().to_ne_bytes());
+	compute_push_values[64 + 8..64 + 12].copy_from_slice(&screen_size.x.to_ne_bytes());
+	compute_push_values[64 + 12..64 + 16].copy_from_slice(&screen_size.y.to_ne_bytes());
+	let compute_push = PackedByteArray::from(compute_push_values);
 
 	rd.draw_command_begin_label("Render Underwater Effect", Color::from_rgb(1.0, 1.0, 1.0));
 	let compute_list = rd.compute_list_begin();

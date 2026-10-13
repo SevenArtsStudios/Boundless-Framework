@@ -17,30 +17,37 @@ pub struct WaterDisplacementQuery {
 }
 
 pub struct WaterDisplacementFetchBatch {
-	rust_ids: Vec<u64>,
-	handle_ids: Vec<i64>,
-	queries: Vec<WaterDisplacementQuery>,
+	entries: Vec<FetchEntry>,
+}
+
+struct FetchEntry {
+	subscriber: FetchSubscriberId,
+	query: WaterDisplacementQuery,
+}
+
+enum FetchSubscriberId {
+	Rust(u64),
+	Handle(i64),
 }
 
 impl WaterDisplacementFetchBatch {
 	#[must_use]
 	pub const fn len(&self) -> usize {
-		self.queries.len()
+		self.entries.len()
 	}
 
 	#[must_use]
 	pub const fn is_empty(&self) -> bool {
-		self.queries.is_empty()
+		self.entries.is_empty()
 	}
 
-	#[must_use]
-	pub fn queries(&self) -> &[WaterDisplacementQuery] {
-		&self.queries
+	pub fn queries(&self) -> impl Iterator<Item = &WaterDisplacementQuery> {
+		self.entries.iter().map(|entry| &entry.query)
 	}
 }
 
 struct RustSubscriber {
-	query: Box<dyn FnMut() -> Option<WaterDisplacementQuery>>,
+	query: Box<dyn FnMut() -> WaterDisplacementQuery>,
 	update: Box<dyn FnMut(Vector3)>,
 }
 
@@ -214,7 +221,7 @@ impl IObject for WaterDisplacement {
 
 impl WaterDisplacement {
 	pub fn subscribe_rust(
-		query: impl FnMut() -> Option<WaterDisplacementQuery> + 'static,
+		query: impl FnMut() -> WaterDisplacementQuery + 'static,
 		update: impl FnMut(Vector3) + 'static,
 	) -> u64 {
 		let id = next_handle_id().cast_unsigned();
@@ -250,19 +257,17 @@ impl WaterDisplacement {
 
 	#[must_use]
 	pub fn collect_fetch_queries() -> WaterDisplacementFetchBatch {
-		let mut batch = WaterDisplacementFetchBatch {
-			rust_ids: Vec::new(),
-			handle_ids: Vec::new(),
-			queries: Vec::new(),
-		};
+		let capacity = RUST_SUBSCRIBERS.with(|subscribers| subscribers.borrow().len())
+			+ HANDLE_SUBSCRIBERS.with(|subscribers| subscribers.borrow().len());
+		let mut entries = Vec::with_capacity(capacity);
 
 		RUST_SUBSCRIBERS.with(|subscribers| {
 			let mut subscribers = subscribers.borrow_mut();
 			for (id, subscriber) in subscribers.iter_mut() {
-				if let Some(query) = (subscriber.query)() {
-					batch.rust_ids.push(*id);
-					batch.queries.push(query);
-				}
+				entries.push(FetchEntry {
+					subscriber: FetchSubscriberId::Rust(*id),
+					query: (subscriber.query)(),
+				});
 			}
 		});
 
@@ -283,12 +288,14 @@ impl WaterDisplacement {
 					continue;
 				};
 
-				batch.handle_ids.push(subscriber.id);
-				batch.queries.push(query);
+				entries.push(FetchEntry {
+					subscriber: FetchSubscriberId::Handle(subscriber.id),
+					query,
+				});
 			}
 		});
 
-		batch
+		WaterDisplacementFetchBatch { entries }
 	}
 
 	pub fn dispatch_fetched_updates(batch: &WaterDisplacementFetchBatch, fetched_xyz: &[f32]) {
@@ -302,7 +309,10 @@ impl WaterDisplacement {
 			return;
 		}
 
-		for (i, rust_id) in batch.rust_ids.iter().enumerate() {
+		for (i, entry) in batch.entries.iter().enumerate() {
+			let FetchSubscriberId::Rust(rust_id) = entry.subscriber else {
+				continue;
+			};
 			let offset = i * 3;
 			let displacement = Vector3::new(
 				fetched_xyz[offset],
@@ -311,16 +321,17 @@ impl WaterDisplacement {
 			);
 
 			RUST_SUBSCRIBERS.with(|subscribers| {
-				if let Some(subscriber) = subscribers.borrow_mut().get_mut(rust_id) {
+				if let Some(subscriber) = subscribers.borrow_mut().get_mut(&rust_id) {
 					(subscriber.update)(displacement);
 				}
 			});
 		}
 
-		let handle_base = batch.rust_ids.len();
-		for (i, handle_id) in batch.handle_ids.iter().enumerate() {
-			let output_index = handle_base + i;
-			let offset = output_index * 3;
+		for (i, entry) in batch.entries.iter().enumerate() {
+			let FetchSubscriberId::Handle(handle_id) = entry.subscriber else {
+				continue;
+			};
+			let offset = i * 3;
 			let displacement = Vector3::new(
 				fetched_xyz[offset],
 				fetched_xyz[offset + 1],
@@ -328,7 +339,7 @@ impl WaterDisplacement {
 			);
 
 			HANDLE_SUBSCRIBERS.with(|subscribers| {
-				if let Some(subscriber) = subscribers.borrow_mut().get_mut(handle_id)
+				if let Some(subscriber) = subscribers.borrow_mut().get_mut(&handle_id)
 					&& let Some(update_callable) = &subscriber.update_callable {
 						update_callable.call_deferred(&[Variant::from(displacement)]);
 					}

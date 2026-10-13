@@ -7,7 +7,7 @@ use crate::water::WaterDisplacement;
 
 
 pub fn run_fetch_displacement_pass(
-	rd: &mut Gd<RenderingDevice>,
+	rd: &mut RenderingDevice,
 	fetch_pipeline: Rid,
 	fetch_shader: Rid,
 	displacement_sampler: Rid,
@@ -25,12 +25,16 @@ pub fn run_fetch_displacement_pass(
 		input_floats.push(query.intensity);
 		input_floats.push(query.scale.max(0.0001));
 	}
+	// SAFETY: `f32` is a plain data type, and reading its representation as bytes is valid.
+	// The byte slice cannot outlive `input_floats` and is only read here.
+	let input_bytes = unsafe {
+		std::slice::from_raw_parts(
+			input_floats.as_slice().as_ptr().cast::<u8>(),
+			input_floats.len() * std::mem::size_of::<f32>()
+		)
+	};
 
-	let mut input_bytes = Vec::<u8>::with_capacity(input_floats.len() * 4);
-	for value in input_floats {
-		input_bytes.extend_from_slice(&value.to_ne_bytes());
-	}
-	let input_data = PackedByteArray::from(input_bytes.as_slice());
+	let input_data = PackedByteArray::from(input_bytes);
 
 	#[allow(clippy::cast_possible_truncation)]
 	let output_byte_count = (batch.len() * 3 * std::mem::size_of::<f32>()) as u32;
@@ -94,12 +98,17 @@ pub fn run_fetch_displacement_pass(
 	rd.draw_command_end_label();
 
 	let output_data = rd.buffer_get_data(output_buffer);
-	let mut fetched_xyz = Vec::<f32>::with_capacity(batch.len() * 3);
-	for chunk in output_data.as_slice().chunks_exact(4) {
-		fetched_xyz.push(f32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
-	}
+	// SAFETY: `u8` is a plain data type, and reading its representation as floats is valid.
+	// The float slice cannot outlive `output_data` and is only read here.
+	#[allow(clippy::cast_ptr_alignment)]
+	let fetched_xyz = unsafe {
+		std::slice::from_raw_parts(
+			output_data.as_slice().as_ptr().cast::<f32>(),
+			output_data.len() / 4
+		)
+	};
 
-	WaterDisplacement::dispatch_fetched_updates(&batch, &fetched_xyz);
+	WaterDisplacement::dispatch_fetched_updates(&batch, fetched_xyz);
 
 	rd.free_rid(uniform_set0);
 	rd.free_rid(uniform_set1);
