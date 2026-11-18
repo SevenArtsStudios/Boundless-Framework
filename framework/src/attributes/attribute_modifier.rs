@@ -65,7 +65,7 @@ where
 
 	for entry in modifiers {
 		match entry.operator() {
-			// NON-DEFERRED = calculation starts HIGHER/LOWER THAN value
+			// NON-DEFERRED = calculation starts off HIGHER/LOWER than value
 			AttributeModifierOperator::MoreThan { deferred: false } | AttributeModifierOperator::LessThan { deferred: false } => {
 				init = lerp(init, entry.apply_to(init), entry.strength());
 			},
@@ -89,17 +89,20 @@ where
 					max = res;
 				}
 			},
-			// Stacking Multiply STACKS with other Multiplies
+			// Stacking multiplies are commutative and stack multiplicatively with each other,
+			// We multiply the products of all operations and then multiply with the base value.
 			//
-			// 0.5 + 0.5 = 0.25
-			// 1.2 + 1.2 + 1.44
+			// x0.5 + x0.5 = x0.25
+			// x1.2 + x1.2 = x1.44
 			AttributeModifierOperator::Multiply { stacking: true } => {
 				mult = lerp(mult, entry.apply_to(mult), entry.strength());
 			},
-			// Add the 'SUM' of the operation, operations DO NOT STACK
+			// Non-stacking operations are non-commutative and do not stack,
+			// We calculate the sum of each operation then apply as a flat bonus.
 			//
-			// 0.5 + 0.5 = 0.0
-			// 1.2 + 1.2 + 1.4
+			// Multiply example:
+			// x0.5 + x0.5 = x0.0
+			// x1.2 + x1.2 = x1.4
 			_ => {
 				add += lerp(base_value, entry.apply_to(base_value), entry.strength()) - base_value;
 			},
